@@ -24,6 +24,19 @@ cd "$WORK"
 # the synced GKI tree, not a source we keep; a re-sync restores it.
 sed -i 's/\bcheck_defconfig\b//' common/build.config.gki
 
+# Pin the scmversion tail so UTS_RELEASE matches the stock vendor modules'
+# vermagic (see STOCK_SCMVERSION in versions.env). Unstamped kleaf builds echo
+# "-maybe-dirty" as the scmversion (stamp.bzl), which no prebuilt module
+# accepts -- WiFi (bcmdhd) and BT then silently fail to load. We build unstamped
+# (no --config=stamp), so replacing that one fallback string is enough; the rest
+# of the release ("-android14-11") kleaf already composes correctly. This edits
+# a file in the synced kleaf tree, not a source we keep; a re-sync restores it.
+STAMP_BZL=build/kernel/kleaf/impl/stamp.bzl
+if [ -n "${STOCK_SCMVERSION:-}" ] && grep -q "echo '-maybe-dirty'" "$STAMP_BZL"; then
+    echo "==> pinning scmversion tail to $STOCK_SCMVERSION"
+    sed -i "s|echo '-maybe-dirty'|echo '$STOCK_SCMVERSION'|" "$STAMP_BZL"
+fi
+
 # Merge our fragment into gki_defconfig so the patched-in subsystems are built.
 # reset --hard in apply-patches restores gki_defconfig to stock, so a fresh
 # apply+build always starts from a clean base and appends once. Guarded anyway.
