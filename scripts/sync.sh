@@ -34,10 +34,15 @@ echo "==> KernelSU-Next ($KSU_NEXT_REF)"
     "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/$KSU_NEXT_REF/kernel/setup.sh" \
     | bash -s "$KSU_NEXT_REF" )
 
-# --- 3. SUSFS -------------------------------------------------------------
-# Nothing to fetch: the Super-Builders SUSFS patch is self-contained -- it
-# creates fs/susfs.c and the headers itself. Copying them in from susfs4ksu
-# only makes the patch's "new file" hunks collide, so we don't.
+# --- 3. SUSFS (simonpunk/susfs4ksu, the WildKernels way) ------------------
+# Clone susfs4ksu and copy its kernel_patches sources into the tree; the patch
+# itself (kernel_patches/50_add_susfs...) is applied later by apply-patches.sh,
+# between fake-patch prepare/restore.
+if [ ! -d susfs4ksu ]; then
+    git clone --depth=1 -b "$SUSFS_BRANCH" "$SUSFS_REPO" susfs4ksu
+fi
+cp susfs4ksu/kernel_patches/fs/* common/fs/ 2>/dev/null || true
+cp susfs4ksu/kernel_patches/include/linux/* common/include/linux/ 2>/dev/null || true
 
 # --- 4. vpnhide built-in source -------------------------------------------
 # Cloned so its built-in translation units are available to graft in. The
