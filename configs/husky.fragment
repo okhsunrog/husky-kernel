@@ -23,3 +23,10 @@ CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
 # --- ZeroMount (VFS redirect backend) ---
 # CONFIG_ZEROMOUNT defaults to y in its Kconfig, so it is on without a line here;
 # adding it would make savedefconfig (which drops defaults) mismatch gki_defconfig.
+
+# --- vpnhide (built-in backend) ---
+# The whole point of this build: vpnhide compiled in, not loaded as an LKM.
+# CONFIG_VPNHIDE defaults to n, so it must be enabled here explicitly.
+# FS_HIDING defaults to y once VPNHIDE is on; stated for intent.
+CONFIG_VPNHIDE=y
+CONFIG_VPNHIDE_FS_HIDING=y

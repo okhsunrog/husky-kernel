@@ -46,16 +46,17 @@ cp susfs4ksu/kernel_patches/fs/* common/fs/ 2>/dev/null || true
 cp susfs4ksu/kernel_patches/include/linux/* common/include/linux/ 2>/dev/null || true
 
 # --- 4. vpnhide built-in source -------------------------------------------
-# Cloned so its built-in translation units are available to graft in. The
-# branch tip is the pin (VPNHIDE_REV); we check it rather than fetch a short
-# sha, which git refuses.
+# Cloned whole so its own integrator, builtin/scripts/apply.sh, is available to
+# apply-patches.sh: that script (not this one) copies the driver, vendors the
+# shared logic + generated tables, installs the header, wires Kconfig/Makefile,
+# and applies the call-site patches. Here we only fetch the pinned tree. The
+# branch tip is the pin (VPNHIDE_REV); we clone the branch and check the sha
+# rather than fetch a short sha, which git refuses.
 if [ ! -d vpnhide ]; then
     git clone --depth=1 -b "$VPNHIDE_REF" "$VPNHIDE_REPO" vpnhide
 fi
 HAVE=$(git -C vpnhide rev-parse --short HEAD)
 [ "$HAVE" = "$VPNHIDE_REV" ] || echo "  ! vpnhide is at $HAVE, versions.env pins $VPNHIDE_REV"
-# The exact set of source files to copy is resolved from vpnhide/builtin on the
-# first real run; see docs/BUILDING.md.
 
 # --- 5. Commit this as the patch base -------------------------------------
 # KernelSU-Next's setup edits tracked files (drivers/Kconfig, drivers/Makefile),

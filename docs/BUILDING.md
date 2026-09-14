@@ -17,43 +17,27 @@ Package the `Image` with AnyKernel3 into a flashable zip, or repack the boot
 image. Flash via the KernelSU-Next / kernelflasher path already on the device.
 Keep the current boot image to restore on a bootloop.
 
-## Left to the first real run
-These depend on the exact synced tree and are pinned down on first build:
-- **vpnhide source copy**: which translation units from `vpnhide/builtin` to
-  drop into `common/` alongside the `.c.patch` grafts, and the Kconfig/Makefile
-  entry to compile them in. Resolved from `vpnhide/builtin/build.py`.
-- **defconfig fragment**: the `CONFIG_KSU*`, `CONFIG_KSU_SUSFS*`, and ZeroMount
-  CONFIGs to enable, assembled the way Super-Builders' assemble-defconfig does.
-- **ospatch pin**: versions.env tracks the nearest published GKI month; confirm
-  the exact branch the device's 6.1.157 came from at sync time.
+## Incremental strategy (a bootloop points at the layer just added)
+1. GKI + KernelSU-Next + SUSFS + **ZeroMount** — **done**. Built, flashed, boots;
+   root works (`context=u:r:ksu:s0`), `/dev/zeromount` present, susfs active in
+   dmesg, and `drop_caches=2` does **not** panic (the NoMount failure that
+   started this is gone).
+2. **vpnhide built-in** — wired: `apply-patches.sh` delegates to vpnhide's own
+   `builtin/scripts/apply.sh`, and `configs/husky.fragment` sets
+   `CONFIG_VPNHIDE=y` + `CONFIG_VPNHIDE_FS_HIDING=y`. Rebuild + flash, then
+   confirm the backend hides a VPN interface without the LKM loaded.
+3. **patch A** — `patches/ksu/90_app_profile_manager_or_root.patch`, applied by
+   apply-patches with `git apply`. Confirm ksud reads/writes app profiles as root.
 
-## First-build strategy
-Bring the layers up incrementally, not all at once:
-1. GKI + KernelSU-Next + SUSFS + **ZeroMount** only — build, flash, confirm it
-   boots and that the ZeroMount redirect survives `drop_caches` (the NoMount
-   failure that started this).
-2. Add **vpnhide built-in** — confirm the backend works without the LKM.
-3. Add **patch A** — confirm ksud reads/writes profiles as root.
-
-A bootloop then points at the layer just added.
-
-## Known blocker: SUSFS patches vs the real GKI tree
-
-Super-Builders (unmaintained since April 2026) ships the SUSFS/ZeroMount kernel
-patches, and they were generated against a GKI tree whose vendor hooks differ
-from what android.googlesource.com actually publishes for android14-6.1-2025-12
-(= 6.1.157, our pin). Concretely: `50_add_susfs`'s first `fs/namespace.c` hunk
-inserts the SUSFS extern block right where stock has `#include
-<trace/hooks/blk.h>`, so the anchor does not match and `patch -F5 --fuzz=5`
-cannot place it. 8 of 9 hunks in that file apply; one does not.
-
-This is not a version mismatch with the device (the pin is the device's exact
-kernel) -- it is the patch being cut against a slightly different vendor set. It
-is fixable by adapting the SUSFS patches to the published tree, hunk by hunk, in
-the forks (okhsunrog/Super-Builders, okhsunrog/zeromount). That adaptation is
-the next work item and is deliberately not rushed at the tail of a long session.
-
-Options if the adaptation proves broad: take SUSFS from a maintained source
-(WildKernels' own susfs patches, or simonpunk/susfs4ksu directly) and reconcile
-ZeroMount against it -- weighed against NoMount (whose maintainer is active and
-whose bug is now precisely localised) and OverlayFS+umount+susfs.
+## Notes settled during the first builds
+- **SUSFS source**: taken from simonpunk/susfs4ksu directly (not Super-Builders,
+  which is unmaintained). Its `50_add_susfs` is cut against a GKI without two
+  vendor-hook includes present in android14-6.1-2025-12; `patches/susfs/
+  fake-patch.sh` removes them before the patch and restores them after. This is
+  how WildKernels apply it, and it builds and boots.
+- **vpnhide integration**: not hand-vendored — delegated to the pinned clone's
+  `builtin/scripts/apply.sh`, the upstream-canonical integrator. See
+  `docs/PATCHES.md`.
+- **GKI pin**: the monthly branches (`android14-6.1-YYYY-MM`) are empty stubs at
+  their tips; `android14-6.1-2025-12` carries the real 6.1.157 tree, the device's
+  kernel. See versions.env.
