@@ -28,11 +28,12 @@ repo sync -c --no-clone-bundle --no-tags --force-sync -j"$(nproc)"
 # --- 2. KernelSU-Next driver ----------------------------------------------
 # Its own installer drops the driver into the tree and wires the Kconfig/Makefile.
 # It looks for drivers/ in the current directory, which in a GKI tree is common/,
-# not the workspace root -- so it runs from there.
-echo "==> KernelSU-Next ($KSU_NEXT_REF)"
-( cd common && curl -LSs \
-    "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/$KSU_NEXT_REF/kernel/setup.sh" \
-    | bash -s "$KSU_NEXT_REF" )
+# not the workspace root -- so it runs from there. The setup.sh URL is derived
+# from KSU_NEXT_REPO so the pin's own fork/branch is what gets installed.
+echo "==> KernelSU-Next ($KSU_NEXT_REPO @ $KSU_NEXT_REF)"
+KSU_RAW="${KSU_NEXT_REPO%.git}"
+KSU_RAW="${KSU_RAW/github.com/raw.githubusercontent.com}"
+( cd common && curl -LSs "$KSU_RAW/$KSU_NEXT_REF/kernel/setup.sh" | bash -s "$KSU_NEXT_REF" )
 
 # --- 3. SUSFS (simonpunk/susfs4ksu, the WildKernels way) ------------------
 # Clone susfs4ksu and copy its kernel_patches sources into the tree; the patch
