@@ -1,0 +1,32 @@
+Subject: [PATCH] ksu: allow root to read and write app profiles, like its siblings
+
+GET_APP_PROFILE and SET_APP_PROFILE are the only two commands in the whole
+dispatch table gated on the manager alone. Every other command that touches
+policy -- the allow and deny lists, whether a uid is granted root or has its
+modules unmounted, the kernel features -- is reachable by root, and is_manager()
+is a bare uid comparison anyway, so a root process can already act as the
+manager by assuming its appid. The check therefore keeps nothing from root; it
+only stops root-side tooling (like ksud) from reading or writing a profile
+without impersonating the manager first.
+
+This widens both to manager_or_root, the check its siblings already carry.
+
+Each entry is anchored on its own .cmd/.name/.handler so the two hunks localise
+uniquely and survive the table being reordered.
+--- a/kernel/supercall/dispatch.c
++++ b/kernel/supercall/dispatch.c
+@@ -866,10 +866,10 @@
+     {
+         .cmd = KSU_IOCTL_GET_APP_PROFILE,
+         .name = "GET_APP_PROFILE",
+         .handler = do_get_app_profile,
+-        .perm_check = only_manager
++        .perm_check = manager_or_root
+     },
+     {
+         .cmd = KSU_IOCTL_SET_APP_PROFILE,
+         .name = "SET_APP_PROFILE",
+         .handler = do_set_app_profile,
+-        .perm_check = only_manager
++        .perm_check = manager_or_root
+     },

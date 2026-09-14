@@ -1,0 +1,4 @@
+# Build trees are large and reproducible from scripts + versions.env.
+/build/
+/out/
+*.log
