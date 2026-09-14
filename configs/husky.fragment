@@ -1,0 +1,24 @@
+# husky-kernel defconfig fragment.
+#
+# Turns on the subsystems the patch layers add. The kernel is built with
+# check_defconfig disabled (see build.sh) so these merge into gki_defconfig
+# without tripping validation. Values mirror what WildKernels enable for GKI.
+
+# --- KernelSU-Next ---
+CONFIG_KSU=y
+CONFIG_KSU_MULTI_MANAGER_SUPPORT=n
+
+# --- SUSFS (hiding) ---
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_SUS_MAP=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+
+# --- ZeroMount (VFS redirect backend) ---
+CONFIG_ZEROMOUNT=y
