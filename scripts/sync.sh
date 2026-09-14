@@ -17,36 +17,37 @@ mkdir -p "$WORK"
 cd "$WORK"
 
 # --- 1. GKI kernel source (brings the AOSP toolchain with it) --------------
-if [ ! -d common ]; then
-    echo "==> repo init: common-$GKI_BRANCH"
-    repo init --depth=1 -u https://android.googlesource.com/kernel/manifest \
-        -b "common-$GKI_BRANCH"
-fi
+# init is idempotent and cheap; running it every time keeps the manifest branch
+# in step with GKI_BRANCH even on a re-sync.
+echo "==> repo init: common-$GKI_BRANCH"
+repo init --depth=1 -u https://android.googlesource.com/kernel/manifest \
+    -b "common-$GKI_BRANCH"
 echo "==> repo sync"
-repo sync -c --no-clone-bundle --no-tags -j"$(nproc)"
+repo sync -c --no-clone-bundle --no-tags --force-sync -j"$(nproc)"
 
 # --- 2. KernelSU-Next driver ----------------------------------------------
 # Its own installer drops the driver into the tree and wires the Kconfig/Makefile.
+# It looks for drivers/ in the current directory, which in a GKI tree is common/,
+# not the workspace root -- so it runs from there.
 echo "==> KernelSU-Next ($KSU_NEXT_REF)"
-curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/$KSU_NEXT_REF/kernel/setup.sh" \
-    | bash -s "$KSU_NEXT_REF"
+( cd common && curl -LSs \
+    "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/$KSU_NEXT_REF/kernel/setup.sh" \
+    | bash -s "$KSU_NEXT_REF" )
 
-# --- 3. SUSFS source files -------------------------------------------------
-# The patches (applied later) expect these files already present in the tree.
-if [ ! -d susfs4ksu ]; then
-    git clone --depth=1 -b "$SUSFS_BRANCH" "$SUSFS_REPO" susfs4ksu
-fi
-git -C susfs4ksu fetch --depth=1 origin "$SUSFS_REV" && git -C susfs4ksu checkout -q "$SUSFS_REV"
-cp susfs4ksu/kernel_patches/fs/* common/fs/ 2>/dev/null || true
-cp susfs4ksu/kernel_patches/include/linux/* common/include/linux/ 2>/dev/null || true
+# --- 3. SUSFS -------------------------------------------------------------
+# Nothing to fetch: the Super-Builders SUSFS patch is self-contained -- it
+# creates fs/susfs.c and the headers itself. Copying them in from susfs4ksu
+# only makes the patch's "new file" hunks collide, so we don't.
 
 # --- 4. vpnhide built-in source -------------------------------------------
-# The .c.patch files graft vpnhide's hooks into existing kernel sources; its own
-# translation units are copied in alongside them.
+# Cloned so its built-in translation units are available to graft in. The
+# branch tip is the pin (VPNHIDE_REV); we check it rather than fetch a short
+# sha, which git refuses.
 if [ ! -d vpnhide ]; then
     git clone --depth=1 -b "$VPNHIDE_REF" "$VPNHIDE_REPO" vpnhide
 fi
-git -C vpnhide fetch --depth=1 origin "$VPNHIDE_REV" && git -C vpnhide checkout -q "$VPNHIDE_REV"
+HAVE=$(git -C vpnhide rev-parse --short HEAD)
+[ "$HAVE" = "$VPNHIDE_REV" ] || echo "  ! vpnhide is at $HAVE, versions.env pins $VPNHIDE_REV"
 # The exact set of source files to copy is resolved from vpnhide/builtin on the
 # first real run; see docs/BUILDING.md.
 

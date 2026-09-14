@@ -1,47 +1,47 @@
 #!/usr/bin/env bash
 # Apply every patch layer to a synced GKI tree, in order, from a clean state.
 #
-# The order is the contract: SUSFS lays the hiding infrastructure, ZeroMount
-# builds its VFS redirect on top (and needs SUSFS present -- fix-susfs-compat
-# reconciles the two), vpnhide adds its hooks, and patch A widens the KSU
-# app-profile permission. Each layer is applied with `git apply`, which fails
-# loudly rather than half-applying, so a reject stops the build instead of
-# producing a silently-wrong kernel.
+# Order is a contract: SUSFS lays the hiding infrastructure, ZeroMount builds its
+# VFS redirect on top (and needs SUSFS present), vpnhide adds its hooks, and
+# patch A widens the KSU app-profile permission.
+#
+# Two tools, on purpose. The SUSFS/ZeroMount/vpnhide patches are distributed for
+# `patch -p1` (fuzzy, offset-tolerant) the way WildKernels and Super-Builders
+# apply them; `git apply` rejects their diff shape. Patch A is the reverse: it
+# replaces the same one line in two adjacent table entries, which `patch`
+# collapses into a single change -- `git apply` applies both. Each layer uses
+# the tool that gets it right.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-source "$ROOT/versions.env"
-
-KERNEL="${1:?usage: apply-patches.sh <kernel-source-dir>}"
+KERNEL="${1:?usage: apply-patches.sh <build-dir>}"
+COMMON="$KERNEL/common"
+KSU="$COMMON/KernelSU-Next"
 P="$ROOT/patches"
 
-cd "$KERNEL"
-git -C common rev-parse HEAD >/dev/null 2>&1 || {
-    echo "error: $KERNEL/common is not a git tree -- run sync.sh first" >&2
-    exit 1
+[ -f "$COMMON/Makefile" ] || { echo "error: no kernel at $COMMON -- run sync.sh" >&2; exit 1; }
+
+pfuzzy() { # label, dir, patch  -- apply with patch -p1
+    echo "==> $1: $(basename "$3")"
+    ( cd "$2" && patch -p1 -F3 --no-backup-if-mismatch < "$3" )
 }
 
-apply() {
-    local label="$1" patch="$2"
-    echo "==> $label: $(basename "$patch")"
-    git -C common apply --recount "$patch"
-}
-
-# 1. SUSFS -----------------------------------------------------------------
-apply susfs "$P/susfs/50_add_susfs_in_gki-android14-6.1.patch"
-apply susfs "$P/susfs/51_enhanced_susfs-android14-6.1.patch"
+# 1. SUSFS (patches create their own susfs.c/.h; nothing is copied in) ------
+pfuzzy susfs "$COMMON" "$P/susfs/50_add_susfs_in_gki-android14-6.1.patch"
+pfuzzy susfs "$COMMON" "$P/susfs/51_enhanced_susfs-android14-6.1.patch"
 
 # 2. ZeroMount (needs SUSFS in place) --------------------------------------
-bash "$P/zeromount/fix-susfs-compat.sh" "$KERNEL/common" || true
-apply zeromount "$P/zeromount/60_zeromount-android14-6.1.patch"
-apply zeromount "$P/zeromount/70_ksu_safety-wksu-6.1.patch"
+bash "$P/zeromount/fix-susfs-compat.sh" "$COMMON" 2>/dev/null || true
+pfuzzy zeromount "$COMMON" "$P/zeromount/60_zeromount-android14-6.1.patch"
+pfuzzy zeromount "$COMMON" "$P/zeromount/70_ksu_safety-wksu-6.1.patch"
 
 # 3. vpnhide built-in (one patch per touched source file) ------------------
 for patch in "$P"/vpnhide/*.c.patch; do
-    apply vpnhide "$patch"
+    pfuzzy vpnhide "$COMMON" "$patch"
 done
 
-# 4. Patch A: root may read/write app profiles -----------------------------
-apply ksu "$P/ksu/90_app_profile_manager_or_root.patch"
+# 4. Patch A: root may read/write app profiles (git apply -- see header) ----
+echo "==> ksu: $(basename "$P"/ksu/90_*.patch)"
+git -C "$KSU" apply --recount "$P"/ksu/90_app_profile_manager_or_root.patch
 
 echo "==> all layers applied"
