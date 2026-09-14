@@ -30,3 +30,20 @@ CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
 # FS_HIDING defaults to y once VPNHIDE is on; stated for intent.
 CONFIG_VPNHIDE=y
 CONFIG_VPNHIDE_FS_HIDING=y
+
+# --- GKI module protection off (so the device's stock modules load) ---
+# GKI's "module protection" rejects a module that is not signed by THIS kernel's
+# key AND exports a "protected" symbol: main.c does
+#   if (!mod->sig_ok && gki_is_module_protected_export(sym)) -> -EACCES
+# The device's stock system_dlkm/vendor_dlkm modules are signed by Google's key,
+# which our kernel cannot verify (mod->sig_ok = false), so rfkill.ko (exports the
+# protected rfkill_alloc) is refused -- and that one rejection cascades:
+# rfkill -> cfg80211 -> bcmdhd, i.e. no WiFi and no Bluetooth (they log
+# "exports protected symbol ..."). Turning MODULE_SIG_PROTECT off makes
+# gki_is_module_protected_export() a stub returning false (module/internal.h), so
+# the check never fires and the stock modules load. WildKernels reach the same
+# end by emptying the protected-exports list; we disable the feature directly,
+# because it is a Kconfig-tracked change that reliably rebuilds (removing the
+# list via the kleaf BUILD.bazel attribute did NOT invalidate the incremental
+# build cache, so the compiled-in list -- and the bug -- survived a rebuild).
+# CONFIG_MODULE_SIG_PROTECT is not set

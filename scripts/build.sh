@@ -24,18 +24,25 @@ cd "$WORK"
 # the synced GKI tree, not a source we keep; a re-sync restores it.
 sed -i 's/\bcheck_defconfig\b//' common/build.config.gki
 
-# Pin the scmversion tail so UTS_RELEASE matches the stock vendor modules'
-# vermagic (see STOCK_SCMVERSION in versions.env). Unstamped kleaf builds echo
-# "-maybe-dirty" as the scmversion (stamp.bzl), which no prebuilt module
-# accepts -- WiFi (bcmdhd) and BT then silently fail to load. We build unstamped
-# (no --config=stamp), so replacing that one fallback string is enough; the rest
-# of the release ("-android14-11") kleaf already composes correctly. This edits
-# a file in the synced kleaf tree, not a source we keep; a re-sync restores it.
+# Pin the scmversion tail so UTS_RELEASE reads as the stock vendor string
+# instead of kleaf's unstamped "-maybe-dirty" placeholder (stamp.bzl echoes it
+# when built without --config=stamp, as we are). This is cosmetic, not the
+# WiFi/BT fix: with CONFIG_MODVERSIONS=y the kernel skips the release-string part
+# of a module's vermagic and gates on symbol CRCs instead, so the scm tail does
+# not decide whether stock modules load (disabling MODULE_SIG_PROTECT in the
+# fragment does). We still pin it so `uname -r` matches stock and no "-maybe-dirty"
+# leaks out. Edits a file in the synced kleaf tree, not a source we keep.
 STAMP_BZL=build/kernel/kleaf/impl/stamp.bzl
 if [ -n "${STOCK_SCMVERSION:-}" ] && grep -q "echo '-maybe-dirty'" "$STAMP_BZL"; then
     echo "==> pinning scmversion tail to $STOCK_SCMVERSION"
     sed -i "s|echo '-maybe-dirty'|echo '$STOCK_SCMVERSION'|" "$STAMP_BZL"
 fi
+
+# The GKI protected-exports gate (which refuses the device's stock modules -- see
+# CONFIG_MODULE_SIG_PROTECT in configs/husky.fragment) is disabled through that
+# Kconfig, not by editing the kleaf BUILD.bazel: removing the list there does not
+# invalidate kleaf's incremental build cache, so the compiled-in list survived a
+# rebuild. A defconfig change is Kbuild-tracked and rebuilds reliably.
 
 # Merge our fragment into gki_defconfig so the patched-in subsystems are built.
 # reset --hard in apply-patches restores gki_defconfig to stock, so a fresh

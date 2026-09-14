@@ -41,3 +41,26 @@ Keep the current boot image to restore on a bootloop.
 - **GKI pin**: the monthly branches (`android14-6.1-YYYY-MM`) are empty stubs at
   their tips; `android14-6.1-2025-12` carries the real 6.1.157 tree, the device's
   kernel. See versions.env.
+- **WiFi/BT (vendor modules)**: a stock GKI kernel needs two things so the
+  device's own modules keep working, since AnyKernel3 flashes only the Image and
+  leaves system_dlkm/vendor_dlkm in place:
+  - *vermagic*: cosmetic here. `CONFIG_MODVERSIONS=y` makes the kernel skip the
+    release-string part of a module's vermagic (it gates on symbol CRCs), so the
+    scmversion pin is for a clean `uname`, not for loading. Note the device
+    carries **two** vermagic strings -- system_dlkm (GKI) vs vendor_dlkm (Pixel)
+    differ in the `-gHASH-abBUILD` tail; matching only one is fine because of the
+    above.
+  - *protected exports*: the real fix. `MODULE_SIG_PROTECT` refuses any module
+    that is unverified against THIS kernel's key AND exports a "protected" symbol
+    (`main.c`: `!mod->sig_ok && gki_is_module_protected_export()` -> `-EACCES`).
+    The stock modules are Google-signed, which our key cannot verify, so
+    `rfkill.ko` (exports `rfkill_alloc`) is refused and the whole chain
+    `rfkill -> cfg80211 -> bcmdhd` fails -- dead WiFi and BT, logged as "exports
+    protected symbol". `configs/husky.fragment` sets
+    `# CONFIG_MODULE_SIG_PROTECT is not set`, which stubs the check out. Removing
+    the protected-exports *list* via the kleaf `BUILD.bazel` attribute (the
+    WildKernels way) reaches the same end in fresh CI but did **not** here: it
+    left kleaf's incremental cache key unchanged, so the compiled-in list (and
+    the bug) survived the rebuild. Verify before flashing: the built `.config`
+    has it unset and `nm vmlinux` no longer lists `gki_is_module_protected_export`.
+    With the fix, all 59 system_dlkm modules load and WiFi/BT work.
