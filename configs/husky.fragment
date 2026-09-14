@@ -21,4 +21,5 @@ CONFIG_KSU_SUSFS_ENABLE_LOG=y
 CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
 
 # --- ZeroMount (VFS redirect backend) ---
-CONFIG_ZEROMOUNT=y
+# CONFIG_ZEROMOUNT defaults to y in its Kconfig, so it is on without a line here;
+# adding it would make savedefconfig (which drops defaults) mismatch gki_defconfig.

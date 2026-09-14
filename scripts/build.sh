@@ -18,14 +18,14 @@ cd "$WORK"
 }
 
 # Let our extra CONFIGs through defconfig validation.
-grep -q 'check_defconfig = "disabled"' common/BUILD.bazel ||
-    sed -i '/name = "kernel_aarch64",/a\    check_defconfig = "disabled",' common/BUILD.bazel
+grep -q '"check_defconfig"' common/BUILD.bazel ||
+    sed -i '/^    "kernel_aarch64": {/a\        "check_defconfig": "disabled",' common/BUILD.bazel
 
 # Merge our fragment into gki_defconfig so the patched-in subsystems are built.
 # reset --hard in apply-patches restores gki_defconfig to stock, so a fresh
 # apply+build always starts from a clean base and appends once. Guarded anyway.
 DEFCONFIG=common/arch/arm64/configs/gki_defconfig
-if ! grep -q '^CONFIG_ZEROMOUNT=y' "$DEFCONFIG"; then
+if ! grep -q '^CONFIG_KSU=y' "$DEFCONFIG"; then
     echo "==> merging configs/husky.fragment into gki_defconfig"
     { echo; cat "$ROOT/configs/husky.fragment"; } >> "$DEFCONFIG"
 fi
