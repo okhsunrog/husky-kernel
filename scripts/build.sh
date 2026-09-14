@@ -17,10 +17,6 @@ cd "$WORK"
     exit 1
 }
 
-# Let our extra CONFIGs through defconfig validation.
-grep -q '"check_defconfig"' common/BUILD.bazel ||
-    sed -i '/^    "kernel_aarch64": {/a\        "check_defconfig": "disabled",' common/BUILD.bazel
-
 # Merge our fragment into gki_defconfig so the patched-in subsystems are built.
 # reset --hard in apply-patches restores gki_defconfig to stock, so a fresh
 # apply+build always starts from a clean base and appends once. Guarded anyway.
