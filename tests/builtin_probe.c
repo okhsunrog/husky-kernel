@@ -39,7 +39,10 @@ static int check(uid_t uid, int hidden)
         close(sock);
         printf("uid=%u visible=%d hwaddr_errno=%d expected_hidden=%d\n", uid, visible, err, hidden);
         fflush(stdout);
-        _exit(hidden ? (visible || err != ENODEV) : (!visible || err != 0));
+        /* Android may omit unaddressed interfaces from unprivileged
+         * getifaddrs even without vpnhide. The control UID proves selective
+         * ioctl hiding; only root must enumerate this transient interface. */
+        _exit(hidden ? (visible || err != ENODEV) : (err != 0 || (uid == 0 && !visible)));
     }
     int status;
     if (waitpid(child, &status, 0) < 0) return 1;
