@@ -21,14 +21,14 @@ P="$ROOT/patches"
 
 [ -f "$COMMON/Makefile" ] || { echo "error: no kernel at $COMMON -- run sync.sh" >&2; exit 1; }
 
-# Start from a clean tree. patch -p1 half-applies and skips on a dirty one, so a
-# re-run must reset the GKI sources to stock first. common is a detached repo;
-# reset --hard restores tracked files, and the susfs/zeromount artefacts are
-# untracked, so they are removed explicitly (KernelSU-Next, a sibling checkout,
-# is left alone).
-echo "==> reset $COMMON to stock"
+# Start from the clean patch base. patch -p1 half-applies and skips on a dirty
+# tree, so a re-run resets first. sync.sh committed the base (GKI + KernelSU-Next
+# + susfs sources), so reset --hard returns there -- KSU integration and susfs.c
+# included, stock namespace.c/base.c restored. Only zeromount.c is untracked (the
+# zeromount patch creates it), so it and any rejects are cleared explicitly.
+echo "==> reset $COMMON to the patch base"
 git -C "$COMMON" reset -q --hard HEAD
-rm -f "$COMMON/fs/susfs.c" "$COMMON/fs/zeromount.c" "$COMMON"/include/linux/susfs*.h
+rm -f "$COMMON/fs/zeromount.c"
 find "$COMMON" -name '*.rej' -delete 2>/dev/null || true
 
 pfuzzy() { # label, dir, patch  -- apply with patch -p1

@@ -56,5 +56,16 @@ HAVE=$(git -C vpnhide rev-parse --short HEAD)
 # The exact set of source files to copy is resolved from vpnhide/builtin on the
 # first real run; see docs/BUILDING.md.
 
+# --- 5. Commit this as the patch base -------------------------------------
+# KernelSU-Next's setup edits tracked files (drivers/Kconfig, drivers/Makefile),
+# and susfs4ksu's sources are copied in. apply-patches resets common to a clean
+# state before every run; without committing here that reset would strip the KSU
+# integration back to stock GKI and CONFIG_KSU would vanish. Committing makes
+# GKI + KSU + susfs sources the base the reset returns to.
+echo "==> commit patch base (GKI + KernelSU-Next + susfs sources)"
+git -C common add -A
+git -C common -c user.name=husky-kernel -c user.email=build@localhost \
+    commit -q -m "husky-kernel patch base: KernelSU-Next + susfs sources" || true
+
 echo "==> synced into $WORK"
 echo "    next: scripts/apply-patches.sh $WORK"
