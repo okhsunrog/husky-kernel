@@ -1,51 +1,38 @@
 # husky-kernel
 
-A reproducible custom kernel for the Pixel 8 Pro (`husky`), GKI android14-6.1.
+Personal Pixel 8 Pro kernel: GKI android14-6.1, KernelSU-Next, SUSFS,
+ZeroMount VFS driver and vpnhide built-in. The integration follows the
+WildKernels approach; the GKI source and every component are pinned explicitly.
 
-Google's GKI source, plus four layers on top:
-
-- **KernelSU-Next** — the root manager (kernel-based `su`, app profiles, modules).
-- **SUSFS** — hiding infrastructure (path/mount/kstat/uname spoofing).
-- **ZeroMount** — mountless module loading via VFS `getname()` redirection.
-  Replaces NoMount, whose redirect is lost when the directory dentry is evicted
-  from the dcache (and which can panic this kernel on `drop_caches`).
-- **vpnhide (built-in)** — kernel-level VPN hiding, compiled in rather than
-  loaded as an LKM.
-- **Patch A** — lets root read and write KernelSU-Next app profiles, so tooling
-  need not impersonate the manager.
-
-Everything is pinned in [`versions.env`](versions.env); that file is the only
-place an input version lives.
+The driver, manager APK and `ksud` come from one commit of
+[`okhsunrog/KernelSU-Next`, `dev-susfs`](https://github.com/okhsunrog/KernelSU-Next/tree/dev-susfs).
+That branch follows `pershoot/dev-susfs`, with four local changes:
+working dependency URLs, root access to app profiles, JSON profile CLI, and
+support for larger signing certificates without growing the kernel stack.
+There is no manager-UID impersonation in the CLI.
 
 ## Build
 
-Toolchain comes with the source — nothing to install but `repo`, `git`, and a
-bazel-capable host (all already present on the build machine). The AOSP prebuilt
-clang arrives with `repo sync`; the host clang is not used for the kernel.
+Requires `uv`, Git, AOSP `repo`, Rust with `cargo-ndk` and the Android arm64
+target, Android SDK/NDKs and JDK 21. Host paths and public manager identity are
+in `versions.env`; AOSP project revisions are in `manifests/aosp.xml`.
 
-```bash
-scripts/sync.sh          build/          # GKI + KSU-Next + SUSFS + vpnhide sources
-scripts/apply-patches.sh build/          # SUSFS → ZeroMount → vpnhide → patch A
-scripts/build.sh         build/          # bazel (kleaf), thin LTO → Image
+```sh
+uv run --no-project scripts/forge.py adopt build
+scripts/sync.sh build
+scripts/release.sh build
 ```
 
-See [docs/BUILDING.md](docs/BUILDING.md) for flashing and the details each
-script leaves to the first real run.
+`adopt` preserves old KSU sources and tracked kernel/Kleaf edits before marking
+the build tree as disposable. Keep development work in separate repositories.
+Run `sync` only when setting up or deliberately changing pins. Ordinary release
+builds do not advance branches or invoke remote setup scripts.
 
-## Layout
+The release directory contains the kernel Image, device-restricted AnyKernel3
+ZIP, signed spoofed manager APK, `ksud`, vpnhide built-in companion ZIP, actual
+kernel configuration, source pins and SHA-256 checksums. Building never flashes
+or reboots a device.
 
-```
-versions.env            every pinned version, and nothing else
-patches/
-  susfs/                50_add_susfs, 51_enhanced_susfs   (from Super-Builders)
-  zeromount/            60_zeromount, 70_ksu_safety, fix-susfs-compat
-  vpnhide/              one .c.patch per kernel source vpnhide hooks
-  ksu/                  90_app_profile_manager_or_root    (patch A, ours)
-scripts/                sync / apply-patches / build
-docs/                   BUILDING, PATCHES
-```
-
-## Status
-
-Scaffolding stage. The pins and patches are in place and patch A is verified to
-apply against KernelSU-Next `dev`; the first full sync+build has not run yet.
+See [BUILDING](docs/BUILDING.md) for installation, recovery and updating, and
+[PATCHES](docs/PATCHES.md) for layer ownership. Cheap recipe regression checks
+run in CI; kernel builds and hardware verification run locally.

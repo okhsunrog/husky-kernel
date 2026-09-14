@@ -2,3 +2,7 @@
 /build/
 /out/
 *.log
+/dist/
+/AnyKernel3/
+/manager-build-backup.*/
+__pycache__/
