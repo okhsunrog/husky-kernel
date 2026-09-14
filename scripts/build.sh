@@ -17,6 +17,13 @@ cd "$WORK"
     exit 1
 }
 
+# Drop the savedefconfig check. kleaf runs POST_DEFCONFIG_CMDS from
+# build.config.gki, which is "check_defconfig" -- it fails the build unless the
+# final .config round-trips to exactly the committed gki_defconfig, which our
+# added CONFIGs cannot. WildKernels remove it the same way. This edits a file in
+# the synced GKI tree, not a source we keep; a re-sync restores it.
+sed -i 's/\bcheck_defconfig\b//' common/build.config.gki
+
 # Merge our fragment into gki_defconfig so the patched-in subsystems are built.
 # reset --hard in apply-patches restores gki_defconfig to stock, so a fresh
 # apply+build always starts from a clean base and appends once. Guarded anyway.
