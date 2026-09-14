@@ -36,3 +36,24 @@ Bring the layers up incrementally, not all at once:
 3. Add **patch A** — confirm ksud reads/writes profiles as root.
 
 A bootloop then points at the layer just added.
+
+## Known blocker: SUSFS patches vs the real GKI tree
+
+Super-Builders (unmaintained since April 2026) ships the SUSFS/ZeroMount kernel
+patches, and they were generated against a GKI tree whose vendor hooks differ
+from what android.googlesource.com actually publishes for android14-6.1-2025-12
+(= 6.1.157, our pin). Concretely: `50_add_susfs`'s first `fs/namespace.c` hunk
+inserts the SUSFS extern block right where stock has `#include
+<trace/hooks/blk.h>`, so the anchor does not match and `patch -F5 --fuzz=5`
+cannot place it. 8 of 9 hunks in that file apply; one does not.
+
+This is not a version mismatch with the device (the pin is the device's exact
+kernel) -- it is the patch being cut against a slightly different vendor set. It
+is fixable by adapting the SUSFS patches to the published tree, hunk by hunk, in
+the forks (okhsunrog/Super-Builders, okhsunrog/zeromount). That adaptation is
+the next work item and is deliberately not rushed at the tail of a long session.
+
+Options if the adaptation proves broad: take SUSFS from a maintained source
+(WildKernels' own susfs patches, or simonpunk/susfs4ksu directly) and reconcile
+ZeroMount against it -- weighed against NoMount (whose maintainer is active and
+whose bug is now precisely localised) and OverlayFS+umount+susfs.
