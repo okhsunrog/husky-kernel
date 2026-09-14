@@ -1,0 +1,4 @@
+# Local kernel patches, one relative filename per line, in application order.
+# Applied after SUSFS, ZeroMount and vpnhide, before configuration.
+# Paths are relative to this directory; patch format is git-style (-p1).
+# Local patches must apply without fuzz. Empty lines and comments are allowed.

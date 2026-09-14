@@ -3,6 +3,7 @@
 import argparse
 import datetime
 import json
+import re
 from pathlib import Path
 import shlex
 import subprocess
@@ -29,6 +30,68 @@ class Device:
         slot = self.adb("shell", "getprop", "ro.boot.slot_suffix").strip()
         require(slot in ["_a", "_b"], "Unrecognised boot slot")
         return slot
+
+    def verify(self):
+        """Read-only postboot checks. Does not change profiles or module state."""
+        report = {"serial": self.serial, "slot": self.validate(), "checks": []}
+
+        def check(name, command, accept):
+            try:
+                output = self.root(command).strip()
+                passed = bool(accept(output))
+            except (subprocess.CalledProcessError, ValueError):
+                output, passed = "command failed", False
+            report["checks"].append({"name": name, "passed": passed, "output": output})
+
+        check("boot completed", "getprop sys.boot_completed", lambda s: s == "1")
+        check("kernel suffix", "uname -r", lambda s: s.endswith(self.c["STOCK_SCMVERSION"]))
+        check("manager installed", "pm path " + shlex.quote(self.c["MANAGER_PACKAGE"]), lambda s: s.startswith("package:"))
+        check("root profile ioctl", "/data/adb/ksud profile get '$'", lambda s: isinstance(json.loads(s), dict))
+        check("vpnhide backend", "cat /proc/vpnhide_ctl", lambda s: bool(re.search(r"backend\s+0x4\b", s))
+              and bool(re.search(r"error\s+0x0\b", s)))
+        check("vpnhide companion", "cat /data/adb/vpnhide_builtin/load_status", lambda s: "loaded=1" in s and "runtime=builtin" in s)
+        check("ZeroMount driver", "test -e /dev/zeromount && echo present", lambda s: s == "present")
+        check("ZeroMount metamodule", "test -x /data/adb/modules/meta-zeromount/bin/zm && "
+              "test ! -e /data/adb/modules/meta-zeromount/disable && "
+              "test ! -e /data/adb/modules/meta-zeromount/remove && echo enabled", lambda s: s == "enabled")
+        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        dest = ROOT / "dist" / ("device-check-" + stamp + ".json")
+        write(dest, json.dumps(report, indent=2) + "\n")
+        dest.chmod(0o600)
+        for item in report["checks"]:
+            print(("OK   " if item["passed"] else "FAIL ") + item["name"])
+        print("Report:", dest)
+        require(all(item["passed"] for item in report["checks"]), "Postboot checks failed; inspect report")
+
+    def rollback(self, backup):
+        backup = Path(backup).resolve()
+        info = json.loads((backup / "backup.json").read_text())
+        image = backup / "boot-before.img"
+        slot = self.validate()
+        require(info["serial"] == self.serial, "Backup belongs to another device")
+        require(info["slot"] == slot, "Backup belongs to another boot slot")
+        require(info["fingerprint"] == self.adb("shell", "getprop", "ro.build.fingerprint").strip(),
+                "Android build changed since backup; do not restore an old boot across an OTA")
+        require(sha(image) == info["boot_sha256"], "Backup checksum mismatch")
+        size = image.stat().st_size
+        block = f"/dev/block/by-name/boot{slot}"
+        require(size > 0 and size == int(self.root(f"blockdev --getsize64 {block}").strip()),
+                "Backup is not a full image of this boot partition")
+        # Save today's state before restoring yesterday's boot. Modules and
+        # manager are deliberately not restored automatically.
+        current = self.backup()
+        current_info = json.loads((current / "backup.json").read_text())
+        stage = current_info["stage"]
+        self.adb("push", image, stage + "/boot-restore.img", capture=False)
+        require(self.root(f"sha256sum {stage}/boot-restore.img").split()[0] == info["boot_sha256"],
+                "Uploaded backup checksum mismatch")
+        require(self.validate() == slot, "Boot slot changed during preparation")
+        require(self.root(f"sha256sum {block}").split()[0] == current_info["boot_sha256"],
+                "Boot partition changed after backup")
+        self.root(f"dd if={stage}/boot-restore.img of={block} bs=1048576 conv=fsync")
+        require(self.root(f"sha256sum {block}").split()[0] == info["boot_sha256"], "Rollback readback mismatch")
+        print("Previous boot restored and verified. Current-state backup:", current)
+        print("Reboot explicitly with: adb -s", self.serial, "reboot")
 
     def backup(self):
         slot = self.validate()
@@ -63,11 +126,16 @@ class Device:
 
     def flash(self, release):
         release = Path(release).resolve()
+        verified = set()
         for line in (release / "SHA256SUMS").read_text().splitlines():
             digest, name = line.split("  ", 1)
             path = release / name
             require(path.resolve().parent == release, "Invalid release manifest path")
             require(sha(path) == digest, "Release checksum mismatch: " + name)
+            require(name not in verified, "Duplicate release manifest entry")
+            verified.add(name)
+        require({"Image", "versions.env", "KernelSU-Next-husky.apk"} <= verified,
+                "Release manifest omits a flashing input")
         pins = read_config(release / "versions.env")
         require(pins == self.c, "Release pins differ from checkout")
         backup = self.backup()
@@ -97,14 +165,20 @@ class Device:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["backup", "flash"])
+    parser.add_argument("command", choices=["backup", "flash", "verify", "rollback"])
     parser.add_argument("--serial", required=True)
     parser.add_argument("--release", type=Path)
+    parser.add_argument("--backup", type=Path)
     args = parser.parse_args()
     device = Device(args.serial)
     if args.command == "flash":
         require(args.release is not None, "--release is required")
         device.flash(args.release)
+    elif args.command == "rollback":
+        require(args.backup is not None, "--backup is required")
+        device.rollback(args.backup)
+    elif args.command == "verify":
+        device.verify()
     else:
         device.backup()
 

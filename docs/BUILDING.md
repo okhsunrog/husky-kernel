@@ -41,6 +41,40 @@ uv run --no-project scripts/forge.py builtin build
 uv run --no-project scripts/forge.py package build
 ```
 
+Run `uv run --no-project scripts/forge.py doctor build` before a build. It checks
+the managed checkout, pinned revisions, tools, both configured NDK installations,
+the Rust Android target and the signing certificate against kernel trust. It
+reports free space and does not install tools or change the host environment.
+
+Add small kernel changes under `patches/local/` and list their filenames in
+`patches/local/series`, in order. These patches apply with `-p1`, without fuzz,
+after the built-in integration layers. No Python edits are needed to add one.
+Do not develop in `build/common`; regenerate it with `prepare` after changing
+the series. Changing scripts, patches, configs or manifests invalidates the
+prepared recipe. Kernel identity includes staged changes, untracked source
+files and copied integration sources; packaging rejects stale kernel builds.
+
+`build/patch-report.json` records layer output, failures, offsets and fuzz. A
+successful report and the kernel input fingerprint are included in releases.
+The vpnhide adapter runs its existing integrator on a temporary copy of affected
+files and only copies the results back after all patches succeed. This prevents
+a vpnhide patch failure from partially modifying those files. It does not make
+the complete `prepare` operation transactional; rerun it after any failure.
+
+To update vpnhide, review a commit and set `VPNHIDE_REV` to its full SHA in
+`versions.env`, then run `scripts/sync.sh build` and
+`scripts/apply-patches.sh build`. Review the patch report before building a new
+release. The adapter supports the current existing-file patch format and stops
+on unsupported paths/formats; a future upstream integrator format may require
+an adapter update. Changes in vpnhide itself are maintained in its own project.
+
+When the pinned vpnhide revision provides `builtin/scripts/integrate.py`, the
+recipe uses its Python `apply` command via uv instead. Detailed review bundles
+are retained under `build/vpnhide-reviews/` and included in releases as
+`vpnhide-review.zip`. The legacy adapter remains only for older pinned releases;
+developing the new tool in a separate worktree does not silently change the
+release's vpnhide source pin.
+
 `kernel` regenerates defconfig and the cosmetic SCM suffix from pristine inputs
 every time. It pins TMPDIR inside the captured Kleaf environment, preventing an
 old host-private temporary directory from breaking sandboxed compiler actions.
@@ -112,6 +146,30 @@ image from bootloader fastboot (`fastboot flash boot_a <backup>` for an `_a`
 backup, or `boot_b` for `_b`). Do not substitute a slot from an older session.
 Keep the previous manager until migration is verified; it remains useful when
 booting the previous kernel.
+
+The checked root-side rollback command is:
+
+```sh
+uv run --no-project scripts/device.py rollback --serial 3B241FDJG003LP --backup /absolute/path/to/dist/backup-UTC
+```
+
+It checks device, active slot, Android fingerprint, backup checksum and partition
+size; creates a fresh backup; verifies the upload and current partition; restores
+boot and checks the readback. It requires the same Android build and boot slot,
+and the Kernel Flasher app used by the existing backup workflow. It does not
+restore modules or the manager, and does not reboot automatically.
+
+For read-only checks after reboot:
+
+```sh
+uv run --no-project scripts/device.py verify --serial 3B241FDJG003LP
+```
+
+This saves a private JSON report under `dist/`: boot completion, kernel suffix,
+manager installation, root profile read, vpnhide backend/companion and ZeroMount
+driver/metamodule presence. These checks do not prove manager recognition,
+active ZeroMount redirects, WiFi/BT connectivity or effective VPN hiding. Use
+the hardware acceptance checks below for those properties.
 
 ## Validation
 
