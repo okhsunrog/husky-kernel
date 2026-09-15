@@ -4,11 +4,11 @@ Applied to the pinned stock GKI tree by `scripts/forge.py prepare`:
 
 1. Wire the pinned KSU fork through `drivers/kernelsu`.
 2. Copy the pinned SUSFS sources and apply its `50_add_susfs` patch between the
-   local vendor-header prepare/restore transformations.
+   checked Python vendor-header prepare/restore transformations in `scripts/layers.py`.
 3. Apply the vendored ZeroMount VFS driver patch after the compatibility helper.
    The unused Wild_KSU-specific `70_ksu_safety` patch is not carried.
-4. Run the pinned vpnhide `builtin/scripts/apply.sh` integrator in a temporary
-   copy of its affected files, then copy the successful output to common. This vendors
+4. Run the pinned vpnhide `builtin/scripts/integrate.py apply` command through
+   uv. It exports and verifies a complete patch before applying its output. This vendors
    shared/generated headers, adds the in-tree driver and applies its call-site
    patches. No loadable vpnhide object is required.
 5. Apply `patches/local/series` in its declared order, with zero fuzz.

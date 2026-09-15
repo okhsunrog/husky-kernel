@@ -21,30 +21,35 @@ not in a second husky patch.
 Initial setup or deliberate pin update:
 
 ```sh
-uv run --no-project scripts/forge.py adopt build
-scripts/sync.sh build
+uv run scripts/forge.py adopt build
+uv run scripts/forge.py sync build
 ```
 
 Build a complete release using those sources:
 
 ```sh
-scripts/release.sh build
+uv run scripts/forge.py release build
 ```
 
 Individual stages are also available:
 
 ```sh
-scripts/apply-patches.sh build
-scripts/build.sh build
-uv run --no-project scripts/forge.py manager build
-uv run --no-project scripts/forge.py builtin build
-uv run --no-project scripts/forge.py package build
+uv run scripts/forge.py prepare build
+uv run scripts/forge.py kernel build
+uv run scripts/forge.py manager build
+uv run scripts/forge.py builtin build
+uv run scripts/forge.py package build
 ```
 
-Run `uv run --no-project scripts/forge.py doctor build` before a build. It checks
+Run `uv run scripts/forge.py doctor build` before a build. It checks
 the managed checkout, pinned revisions, tools, both configured NDK installations,
 the Rust Android target and the signing certificate against kernel trust. It
 reports free space and does not install tools or change the host environment.
+
+Use `uv sync --locked` to install the development tools from `uv.lock`.
+CLI operations hold a per-tree lock for their complete duration: a concurrent
+prepare/build against the same `build/` fails immediately. Separate build trees
+can be used independently. `doctor` remains read-only.
 
 Add small kernel changes under `patches/local/` and list their filenames in
 `patches/local/series`, in order. These patches apply with `-p1`, without fuzz,
@@ -54,26 +59,25 @@ the series. Changing scripts, patches, configs or manifests invalidates the
 prepared recipe. Kernel identity includes staged changes, untracked source
 files and copied integration sources; packaging rejects stale kernel builds.
 
-`build/patch-report.json` records layer output, failures, offsets and fuzz. A
-successful report and the kernel input fingerprint are included in releases.
-The vpnhide adapter runs its existing integrator on a temporary copy of affected
-files and only copies the results back after all patches succeed. This prevents
-a vpnhide patch failure from partially modifying those files. It does not make
-the complete `prepare` operation transactional; rerun it after any failure.
+`build/patch-report.json` records layer output, failures, offsets and fuzz,
+and before/after hashes for Python source transformations. The detailed vpnhide
+review bundle is stored under `build/vpnhide-reviews/` and included in releases
+as `vpnhide-review.zip`. The Python integrator plans edits against the actual
+SUSFS/ZeroMount tree, verifies a complete exported patch on a temporary copy,
+and rechecks inputs before writing. A failed preparation invalidates the old
+prepared marker; rerun `prepare` after resolving the error.
 
 To update vpnhide, review a commit and set `VPNHIDE_REV` to its full SHA in
-`versions.env`, then run `scripts/sync.sh build` and
-`scripts/apply-patches.sh build`. Review the patch report before building a new
-release. The adapter supports the current existing-file patch format and stops
-on unsupported paths/formats; a future upstream integrator format may require
-an adapter update. Changes in vpnhide itself are maintained in its own project.
+`versions.env`, then run `uv run scripts/forge.py sync build` and
+`uv run scripts/forge.py prepare build`. Inspect `patch-report.json` and the
+linked `report.md` before building. The pin must contain the Python integrator;
+there is no shell fallback.
 
-When the pinned vpnhide revision provides `builtin/scripts/integrate.py`, the
-recipe uses its Python `apply` command via uv instead. Detailed review bundles
-are retained under `build/vpnhide-reviews/` and included in releases as
-`vpnhide-review.zip`. The legacy adapter remains only for older pinned releases;
-developing the new tool in a separate worktree does not silently change the
-release's vpnhide source pin.
+Host orchestration uses Python through uv. `scripts/layers.py` owns the two
+SUSFS vendor-header transformations and the small Linux 6.1 compatibility fix.
+Unknown source shapes fail instead of running legacy fixes intended for other
+kernels. The shell script in `configs/anykernel.sh` remains part of the Android
+installer, where uv/Python is unavailable.
 
 `kernel` regenerates defconfig and the cosmetic SCM suffix from pristine inputs
 every time. It pins TMPDIR inside the captured Kleaf environment, preventing an
@@ -114,7 +118,7 @@ Preparation checks the configured certificate length against the driver limit.
 The flashing command requires an explicit serial and release directory:
 
 ```sh
-uv run --no-project scripts/device.py flash --serial 3B241FDJG003LP --release /absolute/path/to/dist/release
+uv run scripts/device.py flash --serial 3B241FDJG003LP --release /absolute/path/to/dist/release
 adb -s 3B241FDJG003LP reboot
 ```
 
@@ -150,7 +154,7 @@ booting the previous kernel.
 The checked root-side rollback command is:
 
 ```sh
-uv run --no-project scripts/device.py rollback --serial 3B241FDJG003LP --backup /absolute/path/to/dist/backup-UTC
+uv run scripts/device.py rollback --serial 3B241FDJG003LP --backup /absolute/path/to/dist/backup-UTC
 ```
 
 It checks device, active slot, Android fingerprint, backup checksum and partition
@@ -162,7 +166,7 @@ restore modules or the manager, and does not reboot automatically.
 For read-only checks after reboot:
 
 ```sh
-uv run --no-project scripts/device.py verify --serial 3B241FDJG003LP
+uv run scripts/device.py verify --serial 3B241FDJG003LP
 ```
 
 This saves a private JSON report under `dist/`: boot completion, kernel suffix,
@@ -174,8 +178,9 @@ the hardware acceptance checks below for those properties.
 ## Validation
 
 ```sh
-uv run --no-project python -m unittest discover -s tests -v
-shellcheck scripts/*.sh
+uv run python -m unittest discover -s tests -v
+uv run ruff check scripts tests
+uv run ruff format --check scripts tests
 ```
 
 Hardware acceptance covers manager recognition, root access, profile JSON

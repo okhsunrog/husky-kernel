@@ -6,3 +6,4 @@
 /AnyKernel3/
 /manager-build-backup.*/
 __pycache__/
+/.venv/

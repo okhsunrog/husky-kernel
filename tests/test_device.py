@@ -1,8 +1,8 @@
 import json
-from pathlib import Path
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -14,7 +14,12 @@ class DeviceSafetyTests(unittest.TestCase):
     def fixture(self, root):
         image = root / "boot-before.img"
         image.write_bytes(b"boot image")
-        info = {"serial": "test", "slot": "_a", "fingerprint": "build", "boot_sha256": sha(image)}
+        info = {
+            "serial": "test",
+            "slot": "_a",
+            "fingerprint": "build",
+            "boot_sha256": sha(image),
+        }
         (root / "backup.json").write_text(json.dumps(info))
         device = Device("test")
         device.validate = Mock(return_value="_a")
@@ -24,7 +29,12 @@ class DeviceSafetyTests(unittest.TestCase):
         return device, info
 
     def test_rollback_rejects_wrong_slot_device_build_or_corruption(self):
-        for field, value in [("slot", "_b"), ("serial", "other"), ("fingerprint", "old-build"), ("boot_sha256", "0" * 64)]:
+        for field, value in [
+            ("slot", "_b"),
+            ("serial", "other"),
+            ("fingerprint", "old-build"),
+            ("boot_sha256", "0" * 64),
+        ]:
             with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 device, info = self.fixture(root)
@@ -52,10 +62,17 @@ class DeviceSafetyTests(unittest.TestCase):
                 device, info = self.fixture(root)
                 current = root / "current"
                 current.mkdir()
-                (current / "backup.json").write_text(json.dumps({"stage": "/data/local/tmp/test", "boot_sha256": "current"}))
+                (current / "backup.json").write_text(
+                    json.dumps({"stage": "/data/local/tmp/test", "boot_sha256": "current"})
+                )
                 device.backup = Mock(return_value=current)
-                responses = [str((root / "boot-before.img").stat().st_size), info["boot_sha256"],
-                             "changed" if changed else "current", "", info["boot_sha256"]]
+                responses = [
+                    str((root / "boot-before.img").stat().st_size),
+                    info["boot_sha256"],
+                    "changed" if changed else "current",
+                    "",
+                    info["boot_sha256"],
+                ]
                 device.root = Mock(side_effect=responses)
                 if changed:
                     with self.assertRaisesRegex(RuntimeError, "changed after backup"):

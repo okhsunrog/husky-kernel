@@ -1,17 +1,32 @@
 import importlib.util
-from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
-from unittest.mock import patch
 import xml.etree.ElementTree as ET
+from pathlib import Path
+from unittest.mock import patch
 
-SPEC = importlib.util.spec_from_file_location("forge", Path(__file__).resolve().parents[1] / "scripts/forge.py")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+SPEC = importlib.util.spec_from_file_location(
+    "forge", Path(__file__).resolve().parents[1] / "scripts/forge.py"
+)
 forge = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(forge)
 
 
 class BuildRecipeTests(unittest.TestCase):
+    def test_overlapping_build_operations_are_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with forge.build_lock(root):
+                with self.assertRaisesRegex(RuntimeError, "Another operation"):
+                    with forge.build_lock(root):
+                        self.fail("Second lock unexpectedly acquired")
+            with forge.build_lock(root):
+                pass
+
     def test_local_series_preserves_order_and_records_added_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -21,13 +36,22 @@ class BuildRecipeTests(unittest.TestCase):
             obj.report = {"steps": []}
             local = root / "patches/local"
             forge.write(local / "series", "# deliberate order\n20-add.patch\n10-change.patch\n")
-            forge.write(local / "20-add.patch", "--- /dev/null\n+++ b/feature.c\n@@ -0,0 +1 @@\n+first\n")
-            forge.write(local / "10-change.patch", "--- a/feature.c\n+++ b/feature.c\n@@ -1 +1 @@\n-first\n+second\n")
+            forge.write(
+                local / "20-add.patch",
+                "--- /dev/null\n+++ b/feature.c\n@@ -0,0 +1 @@\n+first\n",
+            )
+            forge.write(
+                local / "10-change.patch",
+                "--- a/feature.c\n+++ b/feature.c\n@@ -1 +1 @@\n-first\n+second\n",
+            )
             with patch.object(forge, "ROOT", root):
                 obj.local_patches()
             self.assertEqual((obj.common / "feature.c").read_text(), "second\n")
             self.assertIn("feature.c", (obj.work / ".husky-local-files.json").read_text())
-            self.assertEqual([s["name"] for s in obj.report["steps"]], ["local: 20-add.patch", "local: 10-change.patch"])
+            self.assertEqual(
+                [s["name"] for s in obj.report["steps"]],
+                ["local: 20-add.patch", "local: 10-change.patch"],
+            )
 
     def test_added_sources_and_staged_changes_affect_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -35,8 +59,23 @@ class BuildRecipeTests(unittest.TestCase):
             subprocess.run(["git", "init", "-q", tmp], check=True)
             forge.write(root / "tracked.c", "before\n")
             subprocess.run(["git", "-C", tmp, "add", "."], check=True)
-            subprocess.run(["git", "-C", tmp, "-c", "user.name=test", "-c", "user.email=test@localhost",
-                            "-c", "commit.gpgSign=false", "commit", "-qm", "fixture"], check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    tmp,
+                    "-c",
+                    "user.name=test",
+                    "-c",
+                    "user.email=test@localhost",
+                    "-c",
+                    "commit.gpgSign=false",
+                    "commit",
+                    "-qm",
+                    "fixture",
+                ],
+                check=True,
+            )
             initial = forge.repo_identity(root)
             forge.write(root / "tracked.c", "after\n")
             subprocess.run(["git", "-C", tmp, "add", "."], check=True)
@@ -48,31 +87,10 @@ class BuildRecipeTests(unittest.TestCase):
             forge.write(root / "new-driver.c", "second\n")
             self.assertNotEqual(added, forge.repo_identity(root))
 
-    def test_failed_vpnhide_integration_leaves_kernel_untouched(self):
+    def test_old_vpnhide_revision_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            obj = forge.Forge(root)
-            obj.report = {"steps": []}
-            forge.write(obj.common / "security/Kconfig", "original\n")
-            forge.write(obj.common / "security/Makefile", "original\n")
-            forge.write(obj.common / "net/socket.c", "original\n")
-            source = root / "vpnhide/builtin"
-            forge.write(source / "versions/android14-6.1/01.patch",
-                        "--- a/net/socket.c\n+++ b/net/socket.c\n@@ -1 +1 @@\n-original\n+changed\n")
-            forge.write(source / "scripts/apply.sh", 'echo changed > "$1/net/socket.c"\necho "failure with offset 4"\nexit 1\n')
-            with self.assertRaisesRegex(RuntimeError, "staged integration failed"):
-                obj.integrate_vpnhide()
-            self.assertEqual((obj.common / "net/socket.c").read_text(), "original\n")
-            self.assertEqual(obj.report["steps"][0]["exit_code"], 1)
-            self.assertEqual(obj.report["steps"][0]["adjustments"], ["failure with offset 4"])
-
-    def test_vpnhide_rejects_patch_traversal(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            obj = forge.Forge(root)
-            forge.write(root / "vpnhide/builtin/versions/android14-6.1/01.patch",
-                        "--- a/../../outside\n+++ b/../../outside\n")
-            with self.assertRaisesRegex(RuntimeError, "Unsafe patch path"):
+            obj = forge.Forge(tmp)
+            with self.assertRaisesRegex(RuntimeError, "lacks the Python integrator"):
                 obj.integrate_vpnhide()
 
     def test_every_manifest_project_has_an_immutable_revision(self):
@@ -82,7 +100,10 @@ class BuildRecipeTests(unittest.TestCase):
         for project in projects:
             self.assertRegex(project.attrib["revision"], r"^[0-9a-f]{40}$")
             self.assertIn("path", project.attrib)
-        self.assertEqual(next(p.attrib["revision"] for p in projects if p.attrib["path"] == "common"), config["GKI_REV"])
+        self.assertEqual(
+            next(p.attrib["revision"] for p in projects if p.attrib["path"] == "common"),
+            config["GKI_REV"],
+        )
 
     def test_unmanaged_tree_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -100,11 +121,29 @@ class BuildRecipeTests(unittest.TestCase):
             forge.write(common / "arch/arm64/configs/gki_defconfig", "CONFIG_BASE=y\n")
             forge.write(common / "build.config.gki", "POST_DEFCONFIG_CMDS=check_defconfig\n")
             forge.write(kleaf / "kleaf/impl/stamp.bzl", "echo '-maybe-dirty'\n")
-            forge.write(kleaf / "kleaf/common_kernels.bzl", 'exclude = [\n                "BUILD.bazel",\n]\n')
+            forge.write(
+                kleaf / "kleaf/common_kernels.bzl",
+                'exclude = [\n                "BUILD.bazel",\n]\n',
+            )
             for repo in [common, kleaf]:
                 subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
-                subprocess.run(["git", "-C", str(repo), "-c", "user.name=test", "-c", "user.email=test@localhost",
-                                "-c", "commit.gpgSign=false", "commit", "-qm", "fixture"], check=True)
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(repo),
+                        "-c",
+                        "user.name=test",
+                        "-c",
+                        "user.email=test@localhost",
+                        "-c",
+                        "commit.gpgSign=false",
+                        "commit",
+                        "-qm",
+                        "fixture",
+                    ],
+                    check=True,
+                )
             obj = forge.Forge(root / "work")
             obj.c["GKI_REV"] = forge.git(common, "rev-parse", "HEAD")
             with patch.object(forge, "ROOT", root):
@@ -119,7 +158,12 @@ class BuildRecipeTests(unittest.TestCase):
                 self.assertEqual(config.count("CONFIG_SECOND=y"), 1)
                 self.assertEqual((kleaf / "kleaf/impl/stamp.bzl").read_text(), "echo '-second'\n")
                 self.assertIn("export TMPDIR=/tmp", (common / "build.config.gki").read_text())
-                self.assertEqual((kleaf / "kleaf/common_kernels.bzl").read_text().count('"KernelSU-Next/manager/**"'), 1)
+                self.assertEqual(
+                    (kleaf / "kleaf/common_kernels.bzl")
+                    .read_text()
+                    .count('"KernelSU-Next/manager/**"'),
+                    1,
+                )
 
 
 if __name__ == "__main__":

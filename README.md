@@ -18,9 +18,10 @@ target, Android SDK/NDKs and JDK 21. Host paths and public manager identity are
 in `versions.env`; AOSP project revisions are in `manifests/aosp.xml`.
 
 ```sh
-uv run --no-project scripts/forge.py adopt build
-scripts/sync.sh build
-scripts/release.sh build
+uv sync --locked
+uv run scripts/forge.py adopt build
+uv run scripts/forge.py sync build
+uv run scripts/forge.py release build
 ```
 
 `adopt` preserves old KSU sources and tracked kernel/Kleaf edits before marking

@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
 """Explicit device actions, separate from building. Requires an adb serial."""
+
 import argparse
 import datetime
 import json
 import re
-from pathlib import Path
 import shlex
 import subprocess
 import zipfile
+from pathlib import Path
 
 from forge import ROOT, read_config, require, sha, write
 
@@ -18,14 +18,21 @@ class Device:
         self.c = read_config()
 
     def adb(self, *args, capture=True):
-        return subprocess.run(["adb", "-s", self.serial, *map(str, args)], check=True,
-                              text=True, stdout=subprocess.PIPE if capture else None).stdout
+        return subprocess.run(
+            ["adb", "-s", self.serial, *map(str, args)],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE if capture else None,
+        ).stdout
 
     def root(self, command):
         return self.adb("shell", "su", "-c", shlex.quote("set -e; " + command))
 
     def validate(self):
-        require(self.adb("shell", "getprop", "ro.product.device").strip() == "husky", "Not a Pixel 8 Pro")
+        require(
+            self.adb("shell", "getprop", "ro.product.device").strip() == "husky",
+            "Not a Pixel 8 Pro",
+        )
         require("uid=0(root)" in self.root("id"), "Root shell unavailable")
         slot = self.adb("shell", "getprop", "ro.boot.slot_suffix").strip()
         require(slot in ["_a", "_b"], "Unrecognised boot slot")
@@ -44,24 +51,56 @@ class Device:
             report["checks"].append({"name": name, "passed": passed, "output": output})
 
         check("boot completed", "getprop sys.boot_completed", lambda s: s == "1")
-        check("kernel suffix", "uname -r", lambda s: s.endswith(self.c["STOCK_SCMVERSION"]))
-        check("manager installed", "pm path " + shlex.quote(self.c["MANAGER_PACKAGE"]), lambda s: s.startswith("package:"))
-        check("root profile ioctl", "/data/adb/ksud profile get '$'", lambda s: isinstance(json.loads(s), dict))
-        check("vpnhide backend", "cat /proc/vpnhide_ctl", lambda s: bool(re.search(r"backend\s+0x4\b", s))
-              and bool(re.search(r"error\s+0x0\b", s)))
-        check("vpnhide companion", "cat /data/adb/vpnhide_builtin/load_status", lambda s: "loaded=1" in s and "runtime=builtin" in s)
-        check("ZeroMount driver", "test -e /dev/zeromount && echo present", lambda s: s == "present")
-        check("ZeroMount metamodule", "test -x /data/adb/modules/meta-zeromount/bin/zm && "
-              "test ! -e /data/adb/modules/meta-zeromount/disable && "
-              "test ! -e /data/adb/modules/meta-zeromount/remove && echo enabled", lambda s: s == "enabled")
-        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        check(
+            "kernel suffix",
+            "uname -r",
+            lambda s: s.endswith(self.c["STOCK_SCMVERSION"]),
+        )
+        check(
+            "manager installed",
+            "pm path " + shlex.quote(self.c["MANAGER_PACKAGE"]),
+            lambda s: s.startswith("package:"),
+        )
+        check(
+            "root profile ioctl",
+            "/data/adb/ksud profile get '$'",
+            lambda s: isinstance(json.loads(s), dict),
+        )
+        check(
+            "vpnhide backend",
+            "cat /proc/vpnhide_ctl",
+            lambda s: (
+                bool(re.search(r"backend\s+0x4\b", s)) and bool(re.search(r"error\s+0x0\b", s))
+            ),
+        )
+        check(
+            "vpnhide companion",
+            "cat /data/adb/vpnhide_builtin/load_status",
+            lambda s: "loaded=1" in s and "runtime=builtin" in s,
+        )
+        check(
+            "ZeroMount driver",
+            "test -e /dev/zeromount && echo present",
+            lambda s: s == "present",
+        )
+        check(
+            "ZeroMount metamodule",
+            "test -x /data/adb/modules/meta-zeromount/bin/zm && "
+            "test ! -e /data/adb/modules/meta-zeromount/disable && "
+            "test ! -e /data/adb/modules/meta-zeromount/remove && echo enabled",
+            lambda s: s == "enabled",
+        )
+        stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
         dest = ROOT / "dist" / ("device-check-" + stamp + ".json")
         write(dest, json.dumps(report, indent=2) + "\n")
         dest.chmod(0o600)
         for item in report["checks"]:
             print(("OK   " if item["passed"] else "FAIL ") + item["name"])
         print("Report:", dest)
-        require(all(item["passed"] for item in report["checks"]), "Postboot checks failed; inspect report")
+        require(
+            all(item["passed"] for item in report["checks"]),
+            "Postboot checks failed; inspect report",
+        )
 
     def rollback(self, backup):
         backup = Path(backup).resolve()
@@ -70,56 +109,95 @@ class Device:
         slot = self.validate()
         require(info["serial"] == self.serial, "Backup belongs to another device")
         require(info["slot"] == slot, "Backup belongs to another boot slot")
-        require(info["fingerprint"] == self.adb("shell", "getprop", "ro.build.fingerprint").strip(),
-                "Android build changed since backup; do not restore an old boot across an OTA")
+        require(
+            info["fingerprint"] == self.adb("shell", "getprop", "ro.build.fingerprint").strip(),
+            "Android build changed since backup; do not restore an old boot across an OTA",
+        )
         require(sha(image) == info["boot_sha256"], "Backup checksum mismatch")
         size = image.stat().st_size
         block = f"/dev/block/by-name/boot{slot}"
-        require(size > 0 and size == int(self.root(f"blockdev --getsize64 {block}").strip()),
-                "Backup is not a full image of this boot partition")
+        require(
+            size > 0 and size == int(self.root(f"blockdev --getsize64 {block}").strip()),
+            "Backup is not a full image of this boot partition",
+        )
         # Save today's state before restoring yesterday's boot. Modules and
         # manager are deliberately not restored automatically.
         current = self.backup()
         current_info = json.loads((current / "backup.json").read_text())
         stage = current_info["stage"]
         self.adb("push", image, stage + "/boot-restore.img", capture=False)
-        require(self.root(f"sha256sum {stage}/boot-restore.img").split()[0] == info["boot_sha256"],
-                "Uploaded backup checksum mismatch")
+        require(
+            self.root(f"sha256sum {stage}/boot-restore.img").split()[0] == info["boot_sha256"],
+            "Uploaded backup checksum mismatch",
+        )
         require(self.validate() == slot, "Boot slot changed during preparation")
-        require(self.root(f"sha256sum {block}").split()[0] == current_info["boot_sha256"],
-                "Boot partition changed after backup")
+        require(
+            self.root(f"sha256sum {block}").split()[0] == current_info["boot_sha256"],
+            "Boot partition changed after backup",
+        )
         self.root(f"dd if={stage}/boot-restore.img of={block} bs=1048576 conv=fsync")
-        require(self.root(f"sha256sum {block}").split()[0] == info["boot_sha256"], "Rollback readback mismatch")
+        require(
+            self.root(f"sha256sum {block}").split()[0] == info["boot_sha256"],
+            "Rollback readback mismatch",
+        )
         print("Previous boot restored and verified. Current-state backup:", current)
         print("Reboot explicitly with: adb -s", self.serial, "reboot")
 
     def backup(self):
         slot = self.validate()
-        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
         dest = ROOT / "dist" / ("backup-" + stamp)
         dest.mkdir(parents=True, mode=0o700)
         stage = "/data/local/tmp/husky-" + stamp
         self.adb("shell", "mkdir", "-m", "700", stage)
         self.root(f"dd if=/dev/block/by-name/boot{slot} of={stage}/boot-before.img bs=1048576")
         self.adb("pull", stage + "/boot-before.img", dest / "boot-before.img", capture=False)
-        require(sha(dest / "boot-before.img") == self.root("sha256sum " + stage + "/boot-before.img").split()[0], "Boot backup checksum mismatch")
+        require(
+            sha(dest / "boot-before.img")
+            == self.root("sha256sum " + stage + "/boot-before.img").split()[0],
+            "Boot backup checksum mismatch",
+        )
         # Preserve module state and config before migrating the vpnhide backend.
-        self.root(f"tar -czf {stage}/modules-before.tar.gz -C /data/adb modules; "
-                  f"if [ -f /data/system/vpnhide_config.json ]; then cp /data/system/vpnhide_config.json {stage}/vpnhide_config.json; fi")
-        self.adb("pull", stage + "/modules-before.tar.gz", dest / "modules-before.tar.gz", capture=False)
-        if self.root("if [ -f /data/system/vpnhide_config.json ]; then echo yes; fi").strip() == "yes":
-            write(dest / "vpnhide_config.json", self.root("cat /data/system/vpnhide_config.json"))
+        self.root(
+            f"tar -czf {stage}/modules-before.tar.gz -C /data/adb modules; "
+            f"if [ -f /data/system/vpnhide_config.json ]; then cp /data/system/vpnhide_config.json {stage}/vpnhide_config.json; fi"
+        )
+        self.adb(
+            "pull",
+            stage + "/modules-before.tar.gz",
+            dest / "modules-before.tar.gz",
+            capture=False,
+        )
+        if (
+            self.root("if [ -f /data/system/vpnhide_config.json ]; then echo yes; fi").strip()
+            == "yes"
+        ):
+            write(
+                dest / "vpnhide_config.json",
+                self.root("cat /data/system/vpnhide_config.json"),
+            )
             (dest / "vpnhide_config.json").chmod(0o600)
-        apk_path = self.adb("shell", "pm", "path", "com.github.capntrips.kernelflasher").strip().removeprefix("package:")
-        require(apk_path.startswith("/data/app/") and "\n" not in apk_path, "Cannot locate kernelflasher APK")
+        apk_path = (
+            self.adb("shell", "pm", "path", "com.github.capntrips.kernelflasher")
+            .strip()
+            .removeprefix("package:")
+        )
+        require(
+            apk_path.startswith("/data/app/") and "\n" not in apk_path,
+            "Cannot locate kernelflasher APK",
+        )
         self.adb("pull", apk_path, dest / "kernelflasher.apk", capture=False)
         with zipfile.ZipFile(dest / "kernelflasher.apk") as apk:
             binary = dest / "magiskboot"
             binary.write_bytes(apk.read("lib/arm64-v8a/libmagiskboot.so"))
             binary.chmod(0o755)
-        info = {"serial": self.serial, "slot": slot, "stage": stage,
-                "boot_sha256": sha(dest / "boot-before.img"),
-                "fingerprint": self.adb("shell", "getprop", "ro.build.fingerprint").strip()}
+        info = {
+            "serial": self.serial,
+            "slot": slot,
+            "stage": stage,
+            "boot_sha256": sha(dest / "boot-before.img"),
+            "fingerprint": self.adb("shell", "getprop", "ro.build.fingerprint").strip(),
+        }
         write(dest / "backup.json", json.dumps(info, indent=2) + "\n")
         print("Backup:", dest)
         return dest
@@ -134,8 +212,10 @@ class Device:
             require(sha(path) == digest, "Release checksum mismatch: " + name)
             require(name not in verified, "Duplicate release manifest entry")
             verified.add(name)
-        require({"Image", "versions.env", "KernelSU-Next-husky.apk"} <= verified,
-                "Release manifest omits a flashing input")
+        require(
+            {"Image", "versions.env", "KernelSU-Next-husky.apk"} <= verified,
+            "Release manifest omits a flashing input",
+        )
         pins = read_config(release / "versions.env")
         require(pins == self.c, "Release pins differ from checkout")
         backup = self.backup()
@@ -145,20 +225,37 @@ class Device:
         self.adb("install", "-r", release / "KernelSU-Next-husky.apk", capture=False)
         self.adb("push", backup / "magiskboot", stage + "/magiskboot", capture=False)
         self.adb("push", release / "Image", stage + "/Image", capture=False)
-        print(self.root(f"cd {stage}; chmod 755 magiskboot; ./magiskboot unpack boot-before.img; "
-                        "cp Image kernel; ./magiskboot repack boot-before.img boot-new.img; "
-                        "mkdir verify; cd verify; ../magiskboot unpack ../boot-new.img"))
+        print(
+            self.root(
+                f"cd {stage}; chmod 755 magiskboot; ./magiskboot unpack boot-before.img; "
+                "cp Image kernel; ./magiskboot repack boot-before.img boot-new.img; "
+                "mkdir verify; cd verify; ../magiskboot unpack ../boot-new.img"
+            )
+        )
         extracted = self.root(f"sha256sum {stage}/verify/kernel").split()[0]
-        require(extracted == sha(release / "Image"), "Repacked boot contains a different kernel")
+        require(
+            extracted == sha(release / "Image"),
+            "Repacked boot contains a different kernel",
+        )
         self.adb("pull", stage + "/boot-new.img", backup / "boot-new.img", capture=False)
         size = (backup / "boot-new.img").stat().st_size
         capacity = int(self.root(f"blockdev --getsize64 /dev/block/by-name/boot{slot}").strip())
         require(size <= capacity, "Repacked image exceeds boot partition")
         require(self.validate() == slot, "Boot slot changed during preparation")
-        require(self.root(f"sha256sum /dev/block/by-name/boot{slot}").split()[0] == info["boot_sha256"], "Boot partition changed after backup")
-        print(self.root(f"dd if={stage}/boot-new.img of=/dev/block/by-name/boot{slot} bs=1048576 conv=fsync"))
+        require(
+            self.root(f"sha256sum /dev/block/by-name/boot{slot}").split()[0] == info["boot_sha256"],
+            "Boot partition changed after backup",
+        )
+        print(
+            self.root(
+                f"dd if={stage}/boot-new.img of=/dev/block/by-name/boot{slot} bs=1048576 conv=fsync"
+            )
+        )
         readback = self.root(f"head -c {size} /dev/block/by-name/boot{slot} | sha256sum").split()[0]
-        require(readback == sha(backup / "boot-new.img"), "Flashed boot failed readback verification")
+        require(
+            readback == sha(backup / "boot-new.img"),
+            "Flashed boot failed readback verification",
+        )
         print("Boot written and verified. Backup:", backup)
         print("Reboot explicitly with: adb -s", self.serial, "reboot")
 
