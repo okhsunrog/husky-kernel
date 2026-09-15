@@ -53,8 +53,12 @@ class Device:
         check("boot completed", "getprop sys.boot_completed", lambda s: s == "1")
         check(
             "kernel suffix",
-            "uname -r",
-            lambda s: s.endswith(self.c["STOCK_SCMVERSION"]),
+            # SUSFS can spoof uname after the companion starts. Read the
+            # version banner instead; this is still not an Image hash check.
+            "cat /proc/version",
+            lambda s: bool(
+                re.match(r"Linux version \S*" + re.escape(self.c["STOCK_SCMVERSION"]) + r"\s", s)
+            ),
         )
         check(
             "manager installed",
@@ -75,6 +79,8 @@ class Device:
         )
         check(
             "vpnhide companion",
+            'grep -Fx "boot_id=$(cat /proc/sys/kernel/random/boot_id)" '
+            "/data/adb/vpnhide_builtin/load_status >/dev/null && "
             "cat /data/adb/vpnhide_builtin/load_status",
             lambda s: "loaded=1" in s and "runtime=builtin" in s,
         )

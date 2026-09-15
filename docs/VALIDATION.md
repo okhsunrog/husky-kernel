@@ -1,4 +1,38 @@
-# Pixel 8 Pro validation, 2026-09-14
+# Pixel 8 Pro validation
+
+## Python workflow release, 2026-09-15
+
+Installed release `20260915T001956Z-fe8ce79b2439` in slot `_a`, including the
+signed manager APK. The release was built with the Python orchestration and
+vpnhide integrator pinned to merged commit `64530f6555a9d997f80db8b55341e461955bd0c2`.
+Backup: `dist/backup-20260915T011758Z` (private; do not publish).
+
+After reboot, the full boot partition and repacked image both had SHA-256
+`a26f11b1054e4e943b0f1803bb485495496475fb3f47450e4744609d086b61e1`.
+Android completed boot, root worked, the manager package was installed, and
+`ksud profile get '$'` returned JSON through the direct root ioctl.
+
+SUSFS intentionally changed `uname -r` to its configured spoofed value.
+`/proc/version` retained the expected `-ge4470993d947-ab15260412` suffix.
+The verification command now reads that banner instead of `uname`, and rejects
+companion status belonging to an earlier boot. The banner check is not an
+Image identity check; the boot hash above provides separate flash evidence.
+
+The companion status matched the current boot ID and reported `runtime=builtin`,
+`loaded=1`. Its installed activator, post-fs-data and service scripts matched
+the release ZIP byte-for-byte, so no companion reinstall was needed.
+The control node reported backend `0x4`, error `0x0`, and nonzero per-UID counters.
+ZeroMount reported scenario `Full`, an active engine and one active VFS rule
+redirecting `/product/etc/CarrierSettings/others.pb` to the imsforge replacement.
+
+WiFi connected and Android reported validated internet access. WiFi and Bluetooth
+kernel modules were loaded. The available dmesg contained no panic, Oops,
+unknown-symbol or module-version mismatch messages. Bluetooth pairing, calling,
+audio, suspend and a new controlled VPN hiding probe were not exercised during
+this installation. Earlier tests below are separate evidence, not repeated tests
+of this release.
+
+## Previous release, 2026-09-14
 
 Release: `20260914T191818Z-fe8ce79b2439`, KSU fork
 `fe8ce79b24392530d197a26280a0dafadbad1e0f`, boot slot `_a`.
