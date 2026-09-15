@@ -34,6 +34,7 @@ ZIP, signed spoofed manager APK, `ksud`, vpnhide built-in companion ZIP, actual
 kernel configuration, source pins and SHA-256 checksums. Building never flashes
 or reboots a device.
 
-See [BUILDING](docs/BUILDING.md) for installation, recovery and updating, and
+See [MAINTENANCE](docs/MAINTENANCE.md) for the update workflow and ownership of changes,
+and [BUILDING](docs/BUILDING.md) for installation, recovery and updating, and
 [PATCHES](docs/PATCHES.md) for layer ownership. Cheap recipe regression checks
 run in CI; kernel builds and hardware verification run locally.
