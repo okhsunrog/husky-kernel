@@ -38,3 +38,10 @@ See [MAINTENANCE](docs/MAINTENANCE.md) for the update workflow and ownership of 
 and [BUILDING](docs/BUILDING.md) for installation, recovery and updating, and
 [PATCHES](docs/PATCHES.md) for layer ownership. Cheap recipe regression checks
 run in CI; kernel builds and hardware verification run locally.
+
+## License
+
+Original build tooling and documentation in this repository are available under
+the [MIT License](LICENSE). Third-party code and patches retain their respective
+upstream licenses. This does not relicense Linux, KernelSU-Next, SUSFS, ZeroMount,
+vpnhide or AnyKernel3, or the kernel binaries built from them.
