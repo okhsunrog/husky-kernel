@@ -48,11 +48,13 @@ CONFIG_VPNHIDE_FS_HIDING=y
 # build cache, so the compiled-in list -- and the bug -- survived a rebuild).
 # CONFIG_MODULE_SIG_PROTECT is not set
 
-# --- Tracing / eBPF (on-device debugging) ---
-# FTRACE_SYSCALLS: sys_enter_*/sys_exit_* tracepoints for syscall-level ftrace and
-# bpftrace. Off by default in gki_defconfig (needs FTRACE, which GKI already sets;
-# HAVE_SYSCALL_TRACEPOINTS is arm64-provided), so enable it explicitly.
+# --- eBPF / BTF (on-device debugging) ---
 # DEBUG_INFO_BTF: kernel BTF at /sys/kernel/btf/vmlinux for BPF CO-RE. Already =y in
 # gki_defconfig; restated so this build cannot silently lose it.
-CONFIG_FTRACE_SYSCALLS=y
+#
+# Do NOT enable CONFIG_FTRACE_SYSCALLS here. It is not KMI-neutral: enabling it
+# shifts trace-event symbol CRCs, so Google's prebuilt vendor modules fail
+# MODVERSIONS ("disagrees about version of symbol") and the device panics at boot
+# ("exynos-mct: unable to determine tick clock rate"). Trace syscalls with kprobes
+# on __arm64_sys_* plus BTF instead — that needs no KMI-breaking config.
 CONFIG_DEBUG_INFO_BTF=y
