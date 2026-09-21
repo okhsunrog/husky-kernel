@@ -2,7 +2,7 @@
 
 Applied to the pinned stock GKI tree by `scripts/forge.py prepare`:
 
-1. Wire the pinned KSU fork through `drivers/kernelsu`.
+1. Wire the pinned KernelSU-Next source through `drivers/kernelsu`.
 2. Copy the pinned SUSFS sources and apply its `50_add_susfs` patch between the
    checked Python vendor-header prepare/restore transformations in `scripts/layers.py`.
 3. Apply the vendored ZeroMount VFS driver patch after the compatibility helper.
@@ -12,10 +12,10 @@ Applied to the pinned stock GKI tree by `scripts/forge.py prepare`:
    shared/generated headers, adds the in-tree driver and applies its call-site
    patches. No loadable vpnhide object is required.
 5. Apply `patches/local/series` in its declared order, with zero fuzz.
-6. Configure the public manager certificate/package and regenerate defconfig.
+6. Regenerate the defconfig from `configs/husky.fragment`.
 
-The app-profile root permission is committed in the KSU fork and checked by
-the recipe. There is no second copy under `patches/ksu`.
+The app-profile root permission comes from upstream KernelSU-Next and is checked
+by the recipe. There is no second copy under `patches/ksu`.
 
 The ZeroMount patch comes from Super-Builders; its actual bytes are versioned
 here. SUSFS and vpnhide integration inputs are pinned by repository commit.

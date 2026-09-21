@@ -263,13 +263,8 @@ class Forge:
         sdk = Path(self.c["ANDROID_HOME"])
         paths = [
             Path(self.c["JAVA_HOME"]) / "bin/java",
-            Path(self.c["JAVA_HOME"]) / "bin/keytool",
-            sdk / "build-tools" / self.c["BUILD_TOOLS_VERSION"] / "apksigner",
+            sdk / "ndk" / self.c["NDK_VERSION"] / "toolchains/llvm/prebuilt/linux-x86_64/bin/clang",
         ]
-        paths.extend(
-            sdk / "ndk" / self.c[key] / "toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
-            for key in ["NDK_VERSION", "MANAGER_NDK_VERSION"]
-        )
         for path in paths:
             check(
                 str(path),
@@ -279,36 +274,9 @@ class Forge:
             )
         check("managed tree", self.owned)
         check("pinned source revisions", self.verify_sources)
-        check("signing identity", self.signing_properties)
         free = shutil.disk_usage(self.work if self.work.exists() else ROOT).free // (1024**3)
         print(f"INFO free space: {free} GiB (allow at least 30 GiB for a fresh build/cache)")
         require(not failures, "Preflight failed: " + ", ".join(failures))
-
-    def signing_properties(self):
-        props = {}
-        for line in Path(self.c["SIGNING_PROPERTIES"]).read_text().splitlines():
-            if "=" in line and not line.lstrip().startswith("#"):
-                key, value = line.split("=", 1)
-                props[key] = value
-        env = {**os.environ, "SIGNING_PASSWORD": props["password"]}
-        cert = subprocess.check_output(
-            [
-                str(Path(self.c["JAVA_HOME"]) / "bin/keytool"),
-                "-exportcert",
-                "-keystore",
-                props["storeFile"],
-                "-alias",
-                props["keyAlias"],
-                "-storepass:env",
-                "SIGNING_PASSWORD",
-            ],
-            env=env,
-        )
-        require(
-            hex(len(cert)) + ":" + hashlib.sha256(cert).hexdigest() == self.c["MANAGER_CERT"],
-            "Signing certificate differs from kernel trust",
-        )
-        return props
 
     def owned(self):
         marker = self.work / ".husky-managed.json"
@@ -533,32 +501,9 @@ class Forge:
         )
         self.integrate_vpnhide()
         self.local_patches()
-        kbuild = self.ksu / "kernel/Kbuild"
-        certificate_limit = re.search(
-            r"#define CERT_MAX_LENGTH (\d+)",
-            (self.ksu / "kernel/manager/apk_sign.c").read_text(),
-        )
-        require(
-            certificate_limit
-            and int(self.c["MANAGER_CERT"].split(":")[0], 16) <= int(certificate_limit[1]),
-            "Manager certificate exceeds the driver's buffer limit",
-        )
-        text, n = re.subn(
-            r"^(KSU_NEXT_MANAGER_LIST := .+)$",
-            r"\1," + self.c["MANAGER_CERT"],
-            kbuild.read_text(),
-            flags=re.M,
-        )
-        require(n == 1, "Manager trust list changed upstream")
-        write(
-            kbuild,
-            text.replace(
-                "ifdef KSU_MANAGER_PACKAGE",
-                "KSU_MANAGER_PACKAGE := "
-                + self.c["MANAGER_PACKAGE"]
-                + "\nifdef KSU_MANAGER_PACKAGE",
-            ),
-        )
+        # The kernel trusts the official KernelSU-Next manager through the built-in
+        # KSU_NEXT_MANAGER_LIST; the stock (incl. spoofed-package) release APK is
+        # installed by hand, so no per-build certificate or package is injected.
         dispatch = (self.ksu / "kernel/supercall/dispatch.c").read_text()
         for name in ["GET_APP_PROFILE", "SET_APP_PROFILE"]:
             require(
@@ -701,16 +646,6 @@ class Forge:
             "# CONFIG_MODULE_SIG_PROTECT is not set" in lines,
             "Stock modules would be blocked",
         )
-        kernel = (self.ksu / "kernel/Kbuild").read_text()
-        require(
-            self.c["MANAGER_CERT"] in kernel and self.c["MANAGER_PACKAGE"] in kernel,
-            "Manager trust is missing",
-        )
-        image = (self.work / "bazel-bin/common/kernel_aarch64/Image").read_bytes()
-        require(
-            self.c["MANAGER_CERT"].encode() in image,
-            "Built Image does not contain the manager certificate",
-        )
 
     def builtin(self):
         self.prepared()
@@ -728,132 +663,6 @@ class Forge:
             env=env,
         )
 
-    def manager(self):
-        self.prepared()
-        env = os.environ.copy()
-        for key in ["JAVA_HOME", "ANDROID_HOME"]:
-            env[key] = self.c[key]
-        ndk = str(Path(self.c["ANDROID_HOME"]) / "ndk" / self.c["NDK_VERSION"])
-        env.update({key: ndk for key in ["NDK_HOME", "ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"]})
-        run(
-            "cargo",
-            "ndk",
-            "-t",
-            "arm64-v8a",
-            "--platform",
-            self.c["ANDROID_API"],
-            "build",
-            "--release",
-            "--locked",
-            cwd=self.ksu / "userspace/ksud",
-            env=env,
-        )
-        manager = self.ksu / "manager"
-        generated_aidl = manager / "app/src/main/aidl" / self.c["MANAGER_PACKAGE"].replace(".", "/")
-        if generated_aidl.exists():
-            shutil.rmtree(generated_aidl)
-        # Regenerate text from Git; binary assets and build artifacts are never rewritten.
-        for name in git(self.ksu, "ls-files", "manager").splitlines():
-            if (self.ksu / name).is_symlink():
-                continue
-            raw = subprocess.check_output(
-                [
-                    "git",
-                    "-C",
-                    str(self.ksu),
-                    "show",
-                    self.c["KSU_NEXT_REV"] + ":" + name,
-                ]
-            )
-            try:
-                text = raw.decode("utf-8")
-            except UnicodeDecodeError:
-                continue
-            if "\0" in text:
-                continue
-            for a, b in [
-                ("com.rifsxd.ksunext", self.c["MANAGER_PACKAGE"]),
-                ("com/rifsxd/ksunext", self.c["MANAGER_PACKAGE"].replace(".", "/")),
-                ("com_rifsxd_ksunext", self.c["MANAGER_PACKAGE"].replace(".", "_")),
-            ]:
-                text = text.replace(a, b)
-            if name == "manager/app/build.gradle.kts":
-                text = text.replace(
-                    'versionName = rootProject.extra["managerVersionName"] as String',
-                    'versionName = "${managerVersionName}-spoofed"',
-                )
-            if name == "manager/gradle/libs.versions.toml":
-                text = re.sub(
-                    r'^ndk = ".*"$',
-                    'ndk = "' + self.c["MANAGER_NDK_VERSION"] + '"',
-                    text,
-                    flags=re.M,
-                )
-            write(self.ksu / name, text)
-        original_aidl = manager / "app/src/main/aidl/com/rifsxd/ksunext"
-        generated_aidl.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(original_aidl, generated_aidl)
-        binary = self.ksu / "userspace/ksud/target/aarch64-linux-android/release/ksud"
-        libs = manager / "app/src/main/jniLibs/arm64-v8a"
-        libs.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(binary, libs / "libksud.so")
-        props = self.signing_properties()
-        for key, value in {
-            "KEYSTORE_FILE": props["storeFile"],
-            "KEYSTORE_PASSWORD": props["password"],
-            "KEY_ALIAS": props["keyAlias"],
-            "KEY_PASSWORD": props["password"],
-        }.items():
-            env["ORG_GRADLE_PROJECT_" + key] = value
-        run("./gradlew", "--no-daemon", "assembleRelease", cwd=manager, env=env)
-        self.verify_apk()
-
-    def verify_apk(self):
-        outputs = self.ksu / "manager/app/build/outputs/apk/release"
-        metadata = json.loads((outputs / "output-metadata.json").read_text())
-        require(
-            metadata["applicationId"] == self.c["MANAGER_PACKAGE"],
-            "APK package mismatch",
-        )
-        element = metadata["elements"][0]
-        expected = 30000 + int(git(self.ksu, "rev-list", "--count", self.c["KSU_VERSION_BASE_REV"]))
-        require(element["versionCode"] == expected, "APK version mismatch")
-        require(
-            element["versionName"].endswith("-spoofed"),
-            "APK version missing spoof suffix",
-        )
-        apk = outputs / element["outputFile"]
-        tool = (
-            Path(self.c["ANDROID_HOME"])
-            / "build-tools"
-            / self.c["BUILD_TOOLS_VERSION"]
-            / "apksigner"
-        )
-        env = os.environ.copy()
-        env["JAVA_HOME"] = self.c["JAVA_HOME"]
-        info = run(tool, "verify", "--verbose", "--print-certs", apk, env=env, capture=True)
-        require(
-            "Verified using v2 scheme (APK Signature Scheme v2): true" in info,
-            "APK lacks a valid v2 signature",
-        )
-        for scheme in ["v3", "v3.1"]:
-            require(
-                f"Verified using {scheme} scheme (APK Signature Scheme {scheme}): false" in info,
-                "KSU's APK parser requires a v2-only signing block",
-            )
-        require(
-            "Verified for SourceStamp: false" in info and "Number of signers: 1" in info,
-            "Unsupported APK signing block layout",
-        )
-        require(
-            self.c["MANAGER_CERT"].split(":")[1] in info,
-            "APK signed by wrong certificate",
-        )
-        with zipfile.ZipFile(apk) as archive:
-            require("lib/arm64-v8a/libksud.so" in archive.namelist(), "Missing arm64 ksud")
-        print("Verified APK:", apk, flush=True)
-        return apk
-
     def package(self):
         self.prepared()
         self.verify_kernel()
@@ -868,18 +677,12 @@ class Forge:
             built["image"] == sha(self.work / "bazel-bin/common/kernel_aarch64/Image"),
             "Kernel Image changed after verification",
         )
-        apk = self.verify_apk()
         stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
         dest = ROOT / "dist" / (stamp + "-" + self.c["KSU_NEXT_REV"][:12])
         dest.mkdir(parents=True)
         output = self.work / "bazel-bin/common/kernel_aarch64"
         for name in ["Image", "System.map", "Module.symvers"]:
             shutil.copy2(output / name, dest / name)
-        shutil.copy2(apk, dest / "KernelSU-Next-husky.apk")
-        shutil.copy2(
-            self.ksu / "userspace/ksud/target/aarch64-linux-android/release/ksud",
-            dest / "ksud",
-        )
         shutil.copy2(ROOT / "versions.env", dest / "versions.env")
         shutil.copy2(ROOT / "manifests/aosp.xml", dest / "aosp.xml")
         shutil.copy2(ROOT / "configs/husky.fragment", dest / "husky.fragment")
@@ -929,9 +732,7 @@ def main():
             "sync-components",
             "prepare",
             "kernel",
-            "manager",
             "builtin",
-            "verify-apk",
             "verify-kernel",
             "package",
             "release",
@@ -947,7 +748,7 @@ def main():
         forge.work.mkdir(parents=True, exist_ok=True)
     require(forge.work.is_dir(), "Build tree is missing: run adopt first")
     commands = (
-        ["prepare", "kernel", "manager", "builtin", "package"]
+        ["prepare", "kernel", "builtin", "package"]
         if args.command == "release"
         else [args.command.replace("-", "_")]
     )

@@ -61,11 +61,6 @@ class Device:
             ),
         )
         check(
-            "manager installed",
-            "pm path " + shlex.quote(self.c["MANAGER_PACKAGE"]),
-            lambda s: s.startswith("package:"),
-        )
-        check(
             "root profile ioctl",
             "/data/adb/ksud profile get '$'",
             lambda s: isinstance(json.loads(s), dict),
@@ -219,7 +214,7 @@ class Device:
             require(name not in verified, "Duplicate release manifest entry")
             verified.add(name)
         require(
-            {"Image", "versions.env", "KernelSU-Next-husky.apk"} <= verified,
+            {"Image", "versions.env"} <= verified,
             "Release manifest omits a flashing input",
         )
         pins = read_config(release / "versions.env")
@@ -227,8 +222,8 @@ class Device:
         backup = self.backup()
         info = json.loads((backup / "backup.json").read_text())
         stage, slot = info["stage"], info["slot"]
-        # This package must exist when the new kernel first scans for a manager.
-        self.adb("install", "-r", release / "KernelSU-Next-husky.apk", capture=False)
+        # The KernelSU-Next manager (official spoofed release APK) is installed by
+        # hand; the kernel trusts it through the built-in manager list.
         self.adb("push", backup / "magiskboot", stage + "/magiskboot", capture=False)
         self.adb("push", release / "Image", stage + "/Image", capture=False)
         print(

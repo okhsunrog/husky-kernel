@@ -7,7 +7,8 @@ source development belongs in the component's repository or in `patches/local/`.
 |---|---|---|
 | Kernel configuration | `configs/husky.fragment` | `prepare`, then build |
 | Small kernel patch or built-in driver | Files under `patches/local/`, listed in `series` | `prepare`, inspect the resulting diff |
-| KernelSU driver, ksud or manager | The KSU fork's `dev-susfs` branch | Update `KSU_NEXT_REV`, sync and rebuild the complete release |
+| KernelSU driver | `pershoot/KernelSU-Next` `dev-susfs` (upstream, no local changes) | Pick a version-compatible commit, update `KSU_NEXT_REV`/`KSU_VERSION_BASE_REV`, sync and rebuild |
+| KernelSU manager | Official KernelSU-Next release APK | Install the spoofed release APK by hand; not built here |
 | vpnhide behavior or integration rules | vpnhide's own repository | Merge its change, pin the full SHA, sync and inspect its review bundle |
 | SUSFS version | `SUSFS_REV` | Check the patch report and `scripts/layers.py` assumptions |
 | GKI base or compiler | `versions.env` and `manifests/aosp.xml` together | Sync, review every layer, rebuild and validate on the device |
@@ -46,7 +47,6 @@ Then build the complete set from those prepared inputs:
 
 ```sh
 uv run scripts/forge.py kernel build
-uv run scripts/forge.py manager build
 uv run scripts/forge.py builtin build
 uv run scripts/forge.py package build
 ```

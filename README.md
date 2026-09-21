@@ -4,18 +4,19 @@ Personal Pixel 8 Pro kernel: GKI android14-6.1, KernelSU-Next, SUSFS,
 ZeroMount VFS driver and vpnhide built-in. The integration follows the
 WildKernels approach; the GKI source and every component are pinned explicitly.
 
-The driver, manager APK and `ksud` come from one commit of
-[`okhsunrog/KernelSU-Next`, `dev-susfs`](https://github.com/okhsunrog/KernelSU-Next/tree/dev-susfs).
-That branch follows `pershoot/dev-susfs`, with four local changes:
-working dependency URLs, root access to app profiles, JSON profile CLI, and
-support for larger signing certificates without growing the kernel stack.
-There is no manager-UID impersonation in the CLI.
+The KernelSU-Next driver comes from one commit of
+[`pershoot/KernelSU-Next`, `dev-susfs`](https://github.com/pershoot/KernelSU-Next/tree/dev-susfs)
+— pershoot's SUSFS branch rebased on upstream `dev`, used as-is with no local
+changes. The manager is the official KernelSU-Next release APK (the spoofed,
+random-package build); the kernel trusts it through the built-in manager list,
+so you install it by hand and this repo neither builds nor signs a manager.
 
 ## Build
 
 Requires `uv`, Git, AOSP `repo`, Rust with `cargo-ndk` and the Android arm64
-target, Android SDK/NDKs and JDK 21. Host paths and public manager identity are
-in `versions.env`; AOSP project revisions are in `manifests/aosp.xml`.
+target (for the vpnhide built-in companion), Android SDK/NDK and JDK 21. Host
+paths and component pins are in `versions.env`; AOSP project revisions are in
+`manifests/aosp.xml`.
 
 ```sh
 uv sync --locked
@@ -30,9 +31,9 @@ Run `sync` only when setting up or deliberately changing pins. Ordinary release
 builds do not advance branches or invoke remote setup scripts.
 
 The release directory contains the kernel Image, device-restricted AnyKernel3
-ZIP, signed spoofed manager APK, `ksud`, vpnhide built-in companion ZIP, actual
-kernel configuration, source pins and SHA-256 checksums. Building never flashes
-or reboots a device.
+ZIP, vpnhide built-in companion ZIP, actual kernel configuration, source pins
+and SHA-256 checksums. Install the official KernelSU-Next manager APK yourself.
+Building never flashes or reboots a device.
 
 See [MAINTENANCE](docs/MAINTENANCE.md) for the update workflow and ownership of changes,
 and [BUILDING](docs/BUILDING.md) for installation, recovery and updating, and
