@@ -380,6 +380,7 @@ class Forge:
             ("susfs4ksu", "SUSFS", "SUSFS_BRANCH"),
             ("vpnhide", "VPNHIDE", "VPNHIDE_REF"),
             ("anykernel", "ANYKERNEL", None),
+            ("zeromount", "ZEROMOUNT", "ZEROMOUNT_REF"),
         ]:
             self.component(
                 self.work / name,
@@ -411,6 +412,7 @@ class Forge:
             (self.work / "susfs4ksu", "SUSFS_REV"),
             (self.work / "vpnhide", "VPNHIDE_REV"),
             (self.work / "anykernel", "ANYKERNEL_REV"),
+            (self.work / "zeromount", "ZEROMOUNT_REV"),
         ]:
             require(
                 git(path, "rev-parse", "HEAD") == self.c[key],

@@ -18,7 +18,13 @@ The app-profile root permission comes from upstream KernelSU-Next and is checked
 by the recipe. There is no second copy under `patches/ksu`.
 
 The ZeroMount patch comes from Super-Builders; its actual bytes are versioned
-here. SUSFS and vpnhide integration inputs are pinned by repository commit.
+here. The userspace checkout is pinned separately to `okhsunrog/zeromount` in
+`versions.env`; syncing that repository does not update the kernel driver.
+`patches/local/10_zeromount-readdir.patch` fixes the driver's directory traversal:
+native filesystem cookies are kept separate from virtual entry state, and
+injected entries use the normal directory actor after native EOF. It uses the
+existing Android KABI reserve slots in `struct file` to preserve its layout.
+SUSFS and vpnhide integration inputs are pinned by repository commit.
 Fuzzy patching is retained for these upstream patch formats, with failures
 propagated rather than suppressed. Review offsets/context during upgrades.
 The output is retained in `build/patch-report.json`, including failed steps.

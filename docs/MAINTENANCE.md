@@ -11,6 +11,8 @@ source development belongs in the component's repository or in `patches/local/`.
 | KernelSU manager | Official KernelSU-Next release APK | Install the spoofed release APK by hand; not built here |
 | vpnhide behavior or integration rules | vpnhide's own repository | Merge its change, pin the full SHA, sync and inspect its review bundle |
 | SUSFS version | `SUSFS_REV` | Check the patch report and `scripts/layers.py` assumptions |
+| ZeroMount userspace | `okhsunrog/zeromount`, `ZEROMOUNT_REV` | Sync the pinned checkout; install its module separately |
+| ZeroMount kernel driver fixes | `patches/local/`, listed in `series` | Prepare, run directory regression tests, rebuild and validate on the device |
 | GKI base or compiler | `versions.env` and `manifests/aosp.xml` together | Sync, review every layer, rebuild and validate on the device |
 | AnyKernel installation logic | `configs/anykernel.sh` | Repackage only after inspecting the installer changes |
 | Root-manager ZIP/metamodule | The module's own project | Install separately; it is not a kernel patch |
