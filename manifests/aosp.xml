@@ -8,8 +8,9 @@
     <linkfile src="build_test.sh" dest="build/build_test.sh" />
     <linkfile src="config.sh" dest="build/config.sh" />
   </project>
-  <project name="kernel/common" path="common" revision="329168aa4f7583bf9ce99bd97161f9a84ff87f10" upstream="android14-6.1-2025-12" dest-branch="android14-6.1-2025-12" />
+  <project name="kernel/common" path="common" revision="8d0115b07367882bf893cf0dbb9d5e7e916d5680" upstream="android14-6.1-2026-06" dest-branch="android14-6.1-2026-06" />
   <project name="kernel/common-modules/virtual-device" path="common-modules/virtual-device" revision="529e4edbd01fb9d7c8ace1d006e0976145dcd728" upstream="android14-6.1" dest-branch="android14-6.1" />
+  <project name="kernel/common-modules/wonder" path="common-modules/wonder" revision="00da481edf6694757fac6db43b8306b26d24042f" upstream="android14-6.1" dest-branch="android14-6.1" />
   <project name="kernel/configs" revision="bd79f38685cf939ab836dd8ddd2e01506ccff47a" upstream="main" dest-branch="main" path="kernel/configs" />
   <project name="kernel/prebuilts/build-tools" path="prebuilts/kernel-build-tools" revision="e905be252a53d20c52bd9e59df3ff8fdd46b9eab" upstream="main-kernel-build-2023" dest-branch="main-kernel-build-2023" clone-depth="1" />
   <project name="platform/build/bazel_common_rules" path="build/bazel_common_rules" revision="62c496cd1d821948d2f4a7fcf702e54416e5a754" upstream="main-kernel-build-2023" dest-branch="main-kernel-build-2023" />
@@ -24,5 +25,5 @@
   <project name="platform/prebuilts/jdk/jdk11" path="prebuilts/jdk/jdk11" revision="649eec4416e2ed6298af49a56876772767a0e5ae" upstream="main-kernel-build-2023" dest-branch="main-kernel-build-2023" clone-depth="1" />
   <project name="platform/system/tools/mkbootimg" path="tools/mkbootimg" revision="615a1fced5f8e2755642d30357674d3bfa21b85e" upstream="main-kernel-build-2023" dest-branch="main-kernel-build-2023" />
   <project name="toolchain/prebuilts/ndk/r23" path="prebuilts/ndk-r23" revision="19ac7e4eded12adb99d4f613490dde6dd0e72664" upstream="main-kernel-build-2023" dest-branch="main-kernel-build-2023" clone-depth="1" />
-  <superproject name="kernel/superproject" revision="common-android14-6.1-2025-12" />
+  <superproject name="kernel/superproject" revision="common-android14-6.1-2026-06" />
 </manifest>

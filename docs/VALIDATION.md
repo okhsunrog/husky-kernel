@@ -1,5 +1,20 @@
 # Pixel 8 Pro validation
 
+## November 2026 host build
+
+Google's `CP4A.261105.040.A1` factory `boot.img` contains Linux
+`6.1.172-android14-11-g8d0115b07367-ab16385437`. The custom Image uses that
+kernel/common revision, the same Clang `r487747c` and `LTO_NONE`. Kleaf's strict
+KMI checks passed. An offline comparison of `Module.symvers` and stock module
+exports resolved all versioned imports from 59 `system_dlkm` modules, 62
+4 KiB `vendor_dlkm` modules and 210 `vendor_kernel_boot` ramdisk modules with
+matching CRCs. The five alternate 16 KiB vendor modules were excluded.
+
+The build reports KernelSU Next code `33405`, SUSFS `v2.3.0` and UAPI 6.
+The official CI Manager APK for `33405` passed Android signature verification
+with a certificate in the kernel's trust list. The ZeroMount patch applied
+with fuzz and offsets. Device boot and functional validation are pending.
+
 ## Python workflow release, 2026-09-15
 
 Installed release `20260915T001956Z-fe8ce79b2439` in slot `_a`, including the

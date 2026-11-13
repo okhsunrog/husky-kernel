@@ -12,13 +12,17 @@
       devShells.${system}.default = pkgs.mkShellNoCC {
         packages = with pkgs; [
           android-tools
+          bubblewrap
           gitMinimal
           git-repo
           gnumake
+          gnused
           jdk21
           lz4
           patch
+          perl
           python312
+          rsync
           unzip
           uv
           zip

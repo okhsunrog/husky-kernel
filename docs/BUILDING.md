@@ -4,7 +4,8 @@
 
 On x86_64 NixOS, enter `nix develop` for the host tools, including AOSP `repo`
 and JDK 21. Enable `programs.nix-ld` to run the Linux binaries from the AOSP
-manifest and Android NDK. The shell uses the existing Android SDK and Rustup
+manifest and Android NDK. The kernel command uses Bubblewrap to provide
+`/bin/bash` for Kleaf on NixOS. The shell uses the existing Android SDK and Rustup
 installation. Install the NDK version from `versions.env`, `cargo-ndk` and the
 Rust `aarch64-linux-android` target if needed. `JAVA_HOME` and `ANDROID_HOME`
 override the machine-specific defaults in `versions.env`.
@@ -81,8 +82,8 @@ To update vpnhide, review a commit and set `VPNHIDE_REV` to its full SHA in
 linked `report.md` before building. The pin must contain the Python integrator;
 there is no shell fallback.
 
-Host orchestration uses Python through uv. `scripts/layers.py` owns the two
-SUSFS vendor-header transformations and the small Linux 6.1 compatibility fix.
+Host orchestration uses Python through uv. `scripts/layers.py` owns the small
+SUSFS compatibility fix for Linux 6.1.
 Unknown source shapes fail instead of running legacy fixes intended for other
 kernels. The shell script in `configs/anykernel.sh` remains part of the Android
 installer, where uv/Python is unavailable.
@@ -102,12 +103,16 @@ KSU versionCode stays the same.
 
 ## Manager
 
-The kernel carries KernelSU-Next's built-in trusted-manager list, so it accepts
-the official KernelSU-Next release manager with no per-build certificate or
-package injection. Install the official spoofed (random-package) release APK by
-hand; this repo neither builds nor signs a manager. Kernel and manager only need
-compatible versions: the kernel's `KSU_VERSION` must be at or above the manager's
-`MINIMAL_SUPPORTED_KERNEL` and share its UAPI version.
+The kernel carries KernelSU-Next's built-in trusted-manager list. Install the
+official signed Manager APK by hand. The kernel's `KSU_VERSION` must be at or
+above the manager's `MINIMAL_SUPPORTED_KERNEL`, and the bundled `ksud` requires
+the same UAPI version as the driver.
+
+The November 2026 pin uses UAPI 6. Use the `manager-spoofed` artifact from
+[KernelSU-Next CI run 39297115788](https://github.com/KernelSU-Next/KernelSU-Next/actions/runs/39297115788)
+at `KSU_VERSION_BASE_REV`. Its versionCode is `33405`, and the APK SHA-256 is
+`608d167f580dc0d5094f07eb9d0ff48118e068506e52ffc22d6425404e786e05`.
+The stable v3.4.2 APK bundles a UAPI 5 `ksud`.
 
 ## Installation and rollback
 
@@ -124,8 +129,8 @@ magiskboot from the installed kernelflasher APK; verifies the extracted kernel;
 writes only the current boot slot; and verifies the written bytes. It does not
 reboot automatically. Backups live in `dist/backup-<UTC>/` and record the slot.
 
-Install the official KernelSU-Next manager APK yourself (the flasher no longer
-installs one), then after boot confirm it is recognised before changing modules.
+Install the Manager APK from the [Manager section](#manager), then after boot
+confirm it is recognised before changing modules.
 Install `vpnhide-builtin.zip`, remove `vpnhide_kmod` through KernelSU, then reboot
 again. The companion ZIP contains no `.ko`; it delivers the existing app config
 to the in-tree backend. Confirm `/proc/vpnhide_ctl` reports `backend 0x4` and

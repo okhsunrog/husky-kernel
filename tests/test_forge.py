@@ -125,6 +125,11 @@ class BuildRecipeTests(unittest.TestCase):
                 kleaf / "kleaf/common_kernels.bzl",
                 'exclude = [\n                "BUILD.bazel",\n]\n',
             )
+            forge.write(
+                kleaf / "kleaf/hermetic_tools.bzl",
+                'actions:\n        mnemonic = "HermeticTools",\n'
+                '        mnemonic = "HermeticToolsRsync",\nend\n',
+            )
             for repo in [common, kleaf]:
                 subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
                 subprocess.run(
@@ -158,6 +163,12 @@ class BuildRecipeTests(unittest.TestCase):
                 self.assertEqual(config.count("CONFIG_SECOND=y"), 1)
                 self.assertEqual((kleaf / "kleaf/impl/stamp.bzl").read_text(), "echo '-second'\n")
                 self.assertIn("export TMPDIR=/tmp", (common / "build.config.gki").read_text())
+                self.assertEqual(
+                    (kleaf / "kleaf/hermetic_tools.bzl")
+                    .read_text()
+                    .count("use_default_shell_env = True"),
+                    2,
+                )
                 self.assertEqual(
                     (kleaf / "kleaf/common_kernels.bzl")
                     .read_text()

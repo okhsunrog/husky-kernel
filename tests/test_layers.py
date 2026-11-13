@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from layers import susfs_compatibility, vendor_headers
+from layers import susfs_compatibility
 
 
 class LayerTests(unittest.TestCase):
@@ -12,29 +12,11 @@ class LayerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.put("fs/namespace.c", '#include "internal.h"\n#include <trace/hooks/blk.h>\n')
-        self.put("fs/super.c", '#include "internal.h"\n#include <trace/hooks/fs.h>\n\nbody\n')
 
     def put(self, name, text):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
-
-    def test_vendor_headers_are_restored_once(self):
-        vendor_headers(self.root, "prepare")
-        self.assertNotIn("trace/hooks", (self.root / "fs/super.c").read_text())
-        vendor_headers(self.root, "restore")
-        self.assertEqual((self.root / "fs/super.c").read_text().count("trace/hooks/fs.h"), 1)
-        with self.assertRaisesRegex(RuntimeError, "unexpectedly present"):
-            vendor_headers(self.root, "restore")
-
-    def test_nonblank_line_after_vendor_header_is_not_deleted(self):
-        self.put("fs/super.c", '#include "internal.h"\n#include <trace/hooks/fs.h>\nimportant();\n')
-        original = (self.root / "fs/namespace.c").read_text()
-        with self.assertRaisesRegex(RuntimeError, "expected one anchor"):
-            vendor_headers(self.root, "prepare")
-        self.assertEqual((self.root / "fs/namespace.c").read_text(), original)
-        self.assertIn("important();", (self.root / "fs/super.c").read_text())
 
     def compatibility_fixture(self):
         self.put("Makefile", "VERSION = 6\nPATCHLEVEL = 1\n")

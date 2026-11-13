@@ -37,31 +37,6 @@ def commit_changes(common: Path, originals: dict[str, str], changes: dict[str, s
     return result
 
 
-def vendor_headers(common: Path, phase: str) -> list[dict]:
-    """Normalize the two vendor headers around the pinned SUSFS patch."""
-    if phase not in {"prepare", "restore"}:
-        raise ValueError(f"Unknown vendor-header phase: {phase}")
-    sources = {
-        "fs/namespace.c": "#include <trace/hooks/blk.h>\n",
-        "fs/super.c": "#include <trace/hooks/fs.h>\n",
-    }
-    originals = {name: (common / name).read_text() for name in sources}
-    changes = {}
-    for name, header in sources.items():
-        text = originals[name]
-        if phase == "prepare":
-            # The former sed command deleted the following line in super.c
-            # unconditionally. Require that line to be blank instead.
-            anchor = header + ("\n" if name == "fs/super.c" else "")
-            changes[name] = replace_once(text, anchor, "", name)
-        else:
-            if header in text:
-                raise RuntimeError(f"Vendor header unexpectedly present during restore: {name}")
-            anchor = '#include "internal.h"\n'
-            changes[name] = replace_once(text, anchor, anchor + header, name)
-    return commit_changes(common, originals, changes)
-
-
 def susfs_compatibility(common: Path) -> list[dict]:
     """Apply the needed 6.1 label fix; reject obsolete compatibility shapes."""
     makefile = (common / "Makefile").read_text()

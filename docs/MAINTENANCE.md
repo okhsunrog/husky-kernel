@@ -8,7 +8,7 @@ source development belongs in the component's repository or in `patches/local/`.
 | Kernel configuration | `configs/husky.fragment` | `prepare`, then build |
 | Small kernel patch or built-in driver | Files under `patches/local/`, listed in `series` | `prepare`, inspect the resulting diff |
 | KernelSU driver | `pershoot/KernelSU-Next` `dev-susfs` (upstream, no local changes) | Pick a version-compatible commit, update `KSU_NEXT_REV`/`KSU_VERSION_BASE_REV`, sync and rebuild |
-| KernelSU manager | Official KernelSU-Next release APK | Install the spoofed release APK by hand; not built here |
+| KernelSU manager | Official KernelSU-Next APK with matching UAPI | Follow the [Manager section](BUILDING.md#manager) for the APK paired with the current pin |
 | vpnhide behavior or integration rules | vpnhide's own repository | Merge its change, pin the full SHA, sync and inspect its review bundle |
 | SUSFS version | `SUSFS_REV` | Check the patch report and `scripts/layers.py` assumptions |
 | ZeroMount userspace | `okhsunrog/zeromount`, `ZEROMOUNT_REV` | Sync the pinned checkout; install its module separately |

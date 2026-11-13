@@ -16,7 +16,7 @@ import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 
-from layers import susfs_compatibility, vendor_headers
+from layers import susfs_compatibility
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -326,6 +326,14 @@ class Forge:
         )
         run("git", "-C", path, "remote", "set-url", "origin", url)
         run("git", "-C", path, "fetch", "--tags", url, branch or rev)
+        if (
+            branch
+            and subprocess.run(
+                ["git", "-C", str(path), "cat-file", "-e", f"{rev}^{{commit}}"],
+                stderr=subprocess.DEVNULL,
+            ).returncode
+        ):
+            run("git", "-C", path, "fetch", url, rev)
         run("git", "-C", path, "checkout", "--detach", rev)
         require(git(path, "rev-parse", "HEAD") == rev, f"Wrong revision in {path}")
 
@@ -345,6 +353,7 @@ class Forge:
                 "restore",
                 "kleaf/impl/stamp.bzl",
                 "kleaf/common_kernels.bzl",
+                "kleaf/hermetic_tools.bzl",
             )
             state.unlink()
         run(
@@ -480,7 +489,6 @@ class Forge:
             for src in (self.work / "susfs4ksu/kernel_patches" / folder).iterdir():
                 require(src.is_file(), f"Unexpected SUSFS source: {src}")
                 shutil.copy2(src, self.common / folder / src.name)
-        self.transformed("susfs prepare", lambda: vendor_headers(self.common, "prepare"))
         self.logged(
             "susfs patch",
             "patch",
@@ -492,7 +500,6 @@ class Forge:
             self.work / "susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-6.1.patch",
             cwd=self.common,
         )
-        self.transformed("susfs restore", lambda: vendor_headers(self.common, "restore"))
         self.transformed("susfs compatibility", lambda: susfs_compatibility(self.common))
         self.logged(
             "zeromount patch",
@@ -559,6 +566,13 @@ class Forge:
             )
             + "\n",
         )
+        tools = "kleaf/hermetic_tools.bzl"
+        original = git(kleaf, "show", f"HEAD:{tools}")
+        for mnemonic in ("HermeticTools", "HermeticToolsRsync"):
+            anchor = f'        mnemonic = "{mnemonic}",\n'
+            require(original.count(anchor) == 1, f"Kleaf host action changed: {mnemonic}")
+            original = original.replace(anchor, anchor + "        use_default_shell_env = True,\n")
+        write(kleaf / tools, original)
 
     def prepared(self):
         self.owned()
@@ -578,11 +592,38 @@ class Forge:
         self.prepared()
         self.configure()
         identity = self.kernel_identity()
+        bazel = self.work / "tools/bazel"
+        command = [bazel]
+        host_tools = []
+        startup = []
+        if not Path("/bin/bash").exists():
+            bash = shutil.which("bash")
+            require(bash and shutil.which("bwrap"), "Kleaf requires /bin/bash or bubblewrap")
+            host_tools = ["--action_env=PATH"]
+            startup = ["--batch"]
+            command = ["bwrap", "--dev-bind", "/", "/", "--tmpfs", "/bin", "--tmpfs", "/usr/bin"]
+            for name, target in {
+                "bash": "bash",
+                "sh": "bash",
+                "sed": "sed",
+                "date": "date",
+            }.items():
+                path = shutil.which(target)
+                require(path, f"Kleaf host tool missing: {target}")
+                command.extend(["--symlink", path, f"/bin/{name}"])
+            for name in ("env", "git"):
+                path = shutil.which(name)
+                require(path, f"Kleaf host tool missing: {name}")
+                command.extend(["--symlink", path, f"/usr/bin/{name}"])
+            command.extend(["--", bazel])
         run(
-            self.work / "tools/bazel",
+            *command,
+            "--output_user_root=" + str(self.work / ".bazel-user-root"),
+            *startup,
             "build",
             "--config=fast",
             "--lto=" + self.c["LTO_MODE"],
+            *host_tools,
             "--action_env=TMPDIR=/tmp",
             "--disk_cache=" + str(self.work / ".bazel-cache"),
             "//common:kernel_aarch64",
@@ -645,7 +686,7 @@ class Forge:
             "VPNHIDE",
             "VPNHIDE_FS_HIDING",
             "MODVERSIONS",
-            "LTO_CLANG_THIN",
+            {"none": "LTO_NONE", "thin": "LTO_CLANG_THIN"}[self.c["LTO_MODE"]],
         ]:
             require("CONFIG_" + key + "=y" in lines, "Missing built config: " + key)
         require(

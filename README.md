@@ -7,9 +7,9 @@ WildKernels approach; the GKI source and every component are pinned explicitly.
 The KernelSU-Next driver comes from one commit of
 [`pershoot/KernelSU-Next`, `dev-susfs`](https://github.com/pershoot/KernelSU-Next/tree/dev-susfs)
 — pershoot's SUSFS branch rebased on upstream `dev`, used as-is with no local
-changes. The manager is the official KernelSU-Next release APK (the spoofed,
-random-package build); the kernel trusts it through the built-in manager list,
-so you install it by hand and this repo neither builds nor signs a manager.
+changes. Install the compatible official KernelSU-Next APK described in
+[BUILDING](docs/BUILDING.md#manager). The kernel trusts its signature through
+the built-in manager list.
 
 ## Build
 
@@ -32,7 +32,7 @@ builds do not advance branches or invoke remote setup scripts.
 
 The release directory contains the kernel Image, device-restricted AnyKernel3
 ZIP, vpnhide built-in companion ZIP, actual kernel configuration, source pins
-and SHA-256 checksums. Install the official KernelSU-Next manager APK yourself.
+and SHA-256 checksums.
 Building never flashes or reboots a device.
 
 See [MAINTENANCE](docs/MAINTENANCE.md) for the update workflow and ownership of changes,
