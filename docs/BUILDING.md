@@ -1,5 +1,14 @@
 # Build, update and install
 
+## Host environment
+
+On x86_64 NixOS, enter `nix develop` for the host tools, including AOSP `repo`
+and JDK 21. Enable `programs.nix-ld` to run the Linux binaries from the AOSP
+manifest and Android NDK. The shell uses the existing Android SDK and Rustup
+installation. Install the NDK version from `versions.env`, `cargo-ndk` and the
+Rust `aarch64-linux-android` target if needed. `JAVA_HOME` and `ANDROID_HOME`
+override the machine-specific defaults in `versions.env`.
+
 ## Source ownership
 
 `versions.env` pins the full component commits. `manifests/aosp.xml` pins all

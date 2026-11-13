@@ -44,6 +44,10 @@ def read_config(path=None):
     return result
 
 
+def host_path(config, key):
+    return Path(os.environ.get(key) or config[key])
+
+
 def run(*args, cwd=None, env=None, capture=False):
     return subprocess.run(
         [str(a) for a in args],
@@ -260,9 +264,9 @@ class Forge:
                 "install aarch64-linux-android",
             ),
         )
-        sdk = Path(self.c["ANDROID_HOME"])
+        sdk = host_path(self.c, "ANDROID_HOME")
         paths = [
-            Path(self.c["JAVA_HOME"]) / "bin/java",
+            host_path(self.c, "JAVA_HOME") / "bin/java",
             sdk / "ndk" / self.c["NDK_VERSION"] / "toolchains/llvm/prebuilt/linux-x86_64/bin/clang",
         ]
         for path in paths:
@@ -652,7 +656,7 @@ class Forge:
     def builtin(self):
         self.prepared()
         env = os.environ.copy()
-        ndk = str(Path(self.c["ANDROID_HOME"]) / "ndk" / self.c["NDK_VERSION"])
+        ndk = str(host_path(self.c, "ANDROID_HOME") / "ndk" / self.c["NDK_VERSION"])
         env.update({key: ndk for key in ["NDK_HOME", "ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"]})
         run(
             "uv",
