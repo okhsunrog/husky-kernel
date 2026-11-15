@@ -4,11 +4,8 @@
 
 On x86_64 NixOS, enter `nix develop` for the host tools, including AOSP `repo`
 and JDK 21. Enable `programs.nix-ld` to run the Linux binaries from the AOSP
-manifest and Android NDK. The kernel command uses Bubblewrap to provide
-`/bin/bash` for Kleaf on NixOS. The shell uses the existing Android SDK and Rustup
-installation. Install the NDK version from `versions.env`, `cargo-ndk` and the
-Rust `aarch64-linux-android` target if needed. `JAVA_HOME` and `ANDROID_HOME`
-override the machine-specific defaults in `versions.env`.
+manifest. The kernel command uses Bubblewrap to provide `/bin/bash` for Kleaf
+on NixOS. `JAVA_HOME` overrides the machine-specific default in `versions.env`.
 
 ## Source ownership
 
@@ -46,14 +43,11 @@ Individual stages are also available:
 ```sh
 uv run scripts/forge.py prepare build
 uv run scripts/forge.py kernel build
-uv run scripts/forge.py builtin build
 uv run scripts/forge.py package build
 ```
 
 Run `uv run scripts/forge.py doctor build` before a build. It checks
-the managed checkout, pinned revisions, tools, the configured NDK installation
-and the Rust Android target. It reports free space and does not install tools or
-change the host environment.
+the managed checkout, pinned revisions and host tools. It also reports free space.
 
 Use `uv sync --locked` to install the development tools from `uv.lock`.
 CLI operations hold a per-tree lock for their complete duration: a concurrent
@@ -131,10 +125,10 @@ reboot automatically. Backups live in `dist/backup-<UTC>/` and record the slot.
 
 Install the Manager APK from the [Manager section](#manager), then after boot
 confirm it is recognised before changing modules.
-Install `vpnhide-builtin.zip`, remove `vpnhide_kmod` through KernelSU, then reboot
-again. The companion ZIP contains no `.ko`; it delivers the existing app config
-to the in-tree backend. Confirm `/proc/vpnhide_ctl` reports `backend 0x4` and
-`/data/adb/vpnhide_builtin/load_status` reports a live backend.
+Install the matching vpnhide 2.x APK and unified Core ZIP from the vpnhide
+project. Follow its migration workflow for existing 1.x installs. Core adopts
+the in-tree driver. Confirm `/proc/vpnhide_ctl` reports `backend 0x4` and check
+the active backend in the vpnhide app.
 
 ZeroMount also needs its userspace metamodule; `/dev/zeromount` alone does not
 load module files. Remove NoMount and reboot before installing another
@@ -171,11 +165,10 @@ For read-only checks after reboot:
 uv run scripts/device.py verify --serial 3B241FDJG003LP
 ```
 
-This saves a private JSON report under `dist/`: boot completion, kernel suffix,
-manager installation, root profile read, vpnhide backend/companion and ZeroMount
-driver/metamodule presence. These checks do not prove manager recognition,
-active ZeroMount redirects, WiFi/BT connectivity or effective VPN hiding. Use
-the hardware acceptance checks below for those properties.
+The private JSON report under `dist/` records boot completion, the kernel
+suffix, root profile access, the vpnhide driver backend, and ZeroMount driver
+and metamodule presence. Check Manager recognition, vpnhide Core adoption,
+active redirects, Wi-Fi and Bluetooth separately on the device.
 
 ## Validation
 

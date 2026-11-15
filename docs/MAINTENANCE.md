@@ -49,7 +49,6 @@ Then build the complete set from those prepared inputs:
 
 ```sh
 uv run scripts/forge.py kernel build
-uv run scripts/forge.py builtin build
 uv run scripts/forge.py package build
 ```
 

@@ -13,8 +13,7 @@ the built-in manager list.
 
 ## Build
 
-Requires `uv`, Git, AOSP `repo`, Rust with `cargo-ndk` and the Android arm64
-target (for the vpnhide built-in companion), Android SDK/NDK and JDK 21. Host
+Requires `uv`, Git, AOSP `repo`, Android platform-tools and JDK 21. Host
 paths and component pins are in `versions.env`; AOSP project revisions are in
 `manifests/aosp.xml`.
 
@@ -31,8 +30,8 @@ Run `sync` only when setting up or deliberately changing pins. Ordinary release
 builds do not advance branches or invoke remote setup scripts.
 
 The release directory contains the kernel Image, device-restricted AnyKernel3
-ZIP, vpnhide built-in companion ZIP, actual kernel configuration, source pins
-and SHA-256 checksums.
+ZIP, actual kernel configuration, source pins and SHA-256 checksums. The
+vpnhide Core module and app are distributed by [vpnhide](https://github.com/okhsunrog/vpnhide).
 Building never flashes or reboots a device.
 
 See [MAINTENANCE](docs/MAINTENANCE.md) for the update workflow and ownership of changes,

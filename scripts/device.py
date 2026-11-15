@@ -53,7 +53,7 @@ class Device:
         check("boot completed", "getprop sys.boot_completed", lambda s: s == "1")
         check(
             "kernel suffix",
-            # SUSFS can spoof uname after the companion starts. Read the
+            # SUSFS can spoof uname. Read the
             # version banner instead; this is still not an Image hash check.
             "cat /proc/version",
             lambda s: bool(
@@ -71,13 +71,6 @@ class Device:
             lambda s: (
                 bool(re.search(r"backend\s+0x4\b", s)) and bool(re.search(r"error\s+0x0\b", s))
             ),
-        )
-        check(
-            "vpnhide companion",
-            'grep -Fx "boot_id=$(cat /proc/sys/kernel/random/boot_id)" '
-            "/data/adb/vpnhide_builtin/load_status >/dev/null && "
-            "cat /data/adb/vpnhide_builtin/load_status",
-            lambda s: "loaded=1" in s and "runtime=builtin" in s,
         )
         check(
             "ZeroMount driver",

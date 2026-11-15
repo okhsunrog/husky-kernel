@@ -44,10 +44,6 @@ def read_config(path=None):
     return result
 
 
-def host_path(config, key):
-    return Path(os.environ.get(key) or config[key])
-
-
 def run(*args, cwd=None, env=None, capture=False):
     return subprocess.run(
         [str(a) for a in args],
@@ -253,29 +249,13 @@ class Forge:
                 failures.append(label)
                 print(f"FAIL {label}: {error}")
 
-        for tool in ["git", "repo", "uv", "bash", "patch", "cargo", "rustup", "adb"]:
+        for tool in ["git", "repo", "uv", "bash", "patch", "adb"]:
             check(tool, lambda tool=tool: require(shutil.which(tool), "not on PATH"))
-        check("cargo-ndk", lambda: run("cargo", "ndk", "--version", capture=True))
+        java = Path(os.environ.get("JAVA_HOME") or self.c["JAVA_HOME"]) / "bin/java"
         check(
-            "Rust Android target",
-            lambda: require(
-                "aarch64-linux-android"
-                in run("rustup", "target", "list", "--installed", capture=True),
-                "install aarch64-linux-android",
-            ),
+            str(java),
+            lambda: require(java.is_file() and os.access(java, os.X_OK), "missing executable"),
         )
-        sdk = host_path(self.c, "ANDROID_HOME")
-        paths = [
-            host_path(self.c, "JAVA_HOME") / "bin/java",
-            sdk / "ndk" / self.c["NDK_VERSION"] / "toolchains/llvm/prebuilt/linux-x86_64/bin/clang",
-        ]
-        for path in paths:
-            check(
-                str(path),
-                lambda path=path: require(
-                    path.is_file() and os.access(path, os.X_OK), "missing executable"
-                ),
-            )
         check("managed tree", self.owned)
         check("pinned source revisions", self.verify_sources)
         free = shutil.disk_usage(self.work if self.work.exists() else ROOT).free // (1024**3)
@@ -694,22 +674,6 @@ class Forge:
             "Stock modules would be blocked",
         )
 
-    def builtin(self):
-        self.prepared()
-        env = os.environ.copy()
-        ndk = str(host_path(self.c, "ANDROID_HOME") / "ndk" / self.c["NDK_VERSION"])
-        env.update({key: ndk for key in ["NDK_HOME", "ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"]})
-        run(
-            "uv",
-            "run",
-            "--no-project",
-            "builtin/build.py",
-            "--out",
-            self.work / "vpnhide-builtin.zip",
-            cwd=self.work / "vpnhide",
-            env=env,
-        )
-
     def package(self):
         self.prepared()
         self.verify_kernel()
@@ -737,7 +701,6 @@ class Forge:
             self.work / "bazel-bin/common/kernel_aarch64_config/out_dir/.config",
             dest / "kernel.config",
         )
-        shutil.copy2(self.work / "vpnhide-builtin.zip", dest / "vpnhide-builtin.zip")
         shutil.copy2(self.work / "patch-report.json", dest / "patch-report.json")
         shutil.copy2(stamp_file, dest / "kernel-inputs.json")
         report = json.loads((self.work / "patch-report.json").read_text())
@@ -779,7 +742,6 @@ def main():
             "sync-components",
             "prepare",
             "kernel",
-            "builtin",
             "verify-kernel",
             "package",
             "release",
@@ -795,7 +757,7 @@ def main():
         forge.work.mkdir(parents=True, exist_ok=True)
     require(forge.work.is_dir(), "Build tree is missing: run adopt first")
     commands = (
-        ["prepare", "kernel", "builtin", "package"]
+        ["prepare", "kernel", "package"]
         if args.command == "release"
         else [args.command.replace("-", "_")]
     )
